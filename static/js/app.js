@@ -57,3 +57,52 @@ function setUpdated(text) {
   const el = document.getElementById('updated');
   if (el) el.textContent = text;
 }
+
+// Flash strip: slides down for new breaking stories and viral X spikes.
+// Deduped per story+kind for 5 minutes so sustained spikes don't spam.
+const Flash = (() => {
+  const KINDS = {
+    breaking: { badge: 'FLASH · BREAKING', bg: '#D92D20' },
+    viral: { badge: 'VIRAL ON X', bg: '#1570EF' },
+  };
+  const recent = new Map();
+  let timer = null;
+  let targetId = null;
+
+  function show(kind, title, storyId) {
+    const key = `${kind}:${storyId ?? title}`;
+    if (recent.has(key) && Date.now() - recent.get(key) < 300000) return;
+    recent.set(key, Date.now());
+    const cfg = KINDS[kind] || KINDS.breaking;
+    document.getElementById('flash-inner').style.background = cfg.bg;
+    document.getElementById('flash-badge').textContent = cfg.badge;
+    document.getElementById('flash-title').textContent = title;
+    targetId = storyId;
+    const strip = document.getElementById('flash-strip');
+    strip.classList.remove('hidden');
+    strip.style.animation = 'none';
+    void strip.offsetHeight;
+    strip.style.animation = '';
+    clearTimeout(timer);
+    timer = setTimeout(hide, 10000);
+  }
+
+  function hide() {
+    document.getElementById('flash-strip').classList.add('hidden');
+  }
+
+  function jump() {
+    hide();
+    Tabs.show('stories');
+    if (targetId) {
+      const card = document.querySelector(`article[data-id="${targetId}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.style.outline = '2px solid #1570EF';
+        setTimeout(() => { card.style.outline = ''; }, 2500);
+      }
+    }
+  }
+
+  return { show, hide, jump };
+})();

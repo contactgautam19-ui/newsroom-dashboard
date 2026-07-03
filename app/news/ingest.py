@@ -198,6 +198,7 @@ def run_ingest_cycle(manual: bool = False) -> dict:
     max_score = 0
     new_count = 0
     seen_ids = []
+    flashes = []
     with db.connect() as con:
         for score, story in articles:
             confidence = scoring.compute_confidence(story, score)
@@ -206,6 +207,9 @@ def run_ingest_cycle(manual: bool = False) -> dict:
             seen_ids.append(story_id)
             new_count += int(is_new)
             max_score = max(max_score, score["total"])
+            if is_new and verdict["status"] == "breaking":
+                flashes.append({"kind": "breaking", "story_id": story_id,
+                                "title": story.raw.title})
 
         # retire anything published too long ago — an old story that keeps
         # re-clustering must not occupy the "latest" board indefinitely
@@ -239,6 +243,8 @@ def run_ingest_cycle(manual: bool = False) -> dict:
             )
 
     publish_rundown()
+    for flash in flashes:
+        events.publish("flash", flash)
     result = {"ok": True, "last_ingest": now_iso, "stories": len(articles),
               "new_stories": new_count, "max_score": max_score, **feed_stats}
     LAST_STATS.clear()

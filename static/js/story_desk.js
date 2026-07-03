@@ -69,20 +69,65 @@ const StoryDesk = (() => {
     </article>`;
   }
 
+  const MIX_COLORS = ['#1570EF', '#079455', '#DC6803', '#D92D20', '#7A5AF8', '#0E9384', '#DD2590', '#667085'];
+
+  function renderMix(view) {
+    const el = document.getElementById('board-mix');
+    if (!el) return;
+    const counts = {};
+    view.forEach(s => { counts[s.category] = (counts[s.category] || 0) + 1; });
+    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const total = view.length;
+    if (!total) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+
+    const R = 26, C = 2 * Math.PI * R;
+    let offset = 0;
+    const segs = entries.map(([cat, n], i) => {
+      const len = (n / total) * C;
+      const seg = `<circle r="${R}" cx="32" cy="32" fill="none" stroke="${MIX_COLORS[i % MIX_COLORS.length]}"
+        stroke-width="10" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-offset}"
+        transform="rotate(-90 32 32)"/>`;
+      offset += len;
+      return seg;
+    }).join('');
+
+    el.innerHTML = `
+      <svg width="64" height="64" viewBox="0 0 64 64" class="shrink-0">${segs}
+        <text x="32" y="36" text-anchor="middle" font-size="16" font-weight="600" fill="#101828">${total}</text>
+      </svg>
+      <div class="flex flex-wrap gap-x-4 gap-y-1 text-[12px]">
+        <span class="w-full text-[11px] font-semibold uppercase tracking-wide text-sub">Board mix by category</span>
+        ${entries.map(([cat, n], i) => `
+          <span class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full" style="background:${MIX_COLORS[i % MIX_COLORS.length]}"></span>
+            ${esc(cat)} <span class="text-sub">${n}</span>
+          </span>`).join('')}
+      </div>`;
+  }
+
   function renderFilters() {
-    const cats = [...new Set(stories.map(s => s.category))].sort();
+    const cats = [...new Set(stories.filter(s => !s.picked).map(s => s.category))].sort();
+    const pickedCount = stories.filter(s => s.picked).length;
     const chips = ['All', 'Breaking', ...cats];
-    document.getElementById('filters').innerHTML = chips.map(c =>
-      `<button onclick="StoryDesk.setFilter('${esc(c)}')" class="px-3 py-1 rounded-full text-[12px] border ${c === filter ? 'chip-active' : 'border-line bg-white text-sub hover:border-ink'}">${esc(c)}</button>`
-    ).join('');
+    if (pickedCount) chips.push(`Picked (${pickedCount})`);
+    document.getElementById('filters').innerHTML = chips.map(c => {
+      const key = c.startsWith('Picked') ? 'Picked' : c;
+      return `<button onclick="StoryDesk.setFilter('${esc(key)}')" class="px-3 py-1 rounded-full text-[12px] border ${key === filter ? 'chip-active' : 'border-line bg-white text-sub hover:border-ink'}">${esc(c)}</button>`;
+    }).join('');
   }
 
   function render(data) {
     if (data) stories = data;
     renderFilters();
-    let view = stories;
-    if (filter === 'Breaking') view = stories.filter(s => s.status === 'breaking');
-    else if (filter !== 'All') view = stories.filter(s => s.category === filter);
+    let view;
+    if (filter === 'Picked') view = stories.filter(s => s.picked);
+    else {
+      view = stories.filter(s => !s.picked);  // picked = handled, off the board
+      if (filter === 'Breaking') view = view.filter(s => s.status === 'breaking');
+      else if (filter !== 'All') view = view.filter(s => s.category === filter);
+    }
+    renderMix(stories.filter(s => !s.picked));
     const el = document.getElementById('story-list');
     el.innerHTML = view.length
       ? view.map((s, i) => card(s, i + 1)).join('')
@@ -92,7 +137,10 @@ const StoryDesk = (() => {
   function setFilter(f) { filter = f; render(); }
 
   async function pick(id) {
-    await api(`/api/stories/${id}/pick`);
+    const s = stories.find(x => x.id === id);
+    if (s) { s.picked = s.picked ? 0 : 1; render(); }  // optimistic
+    const r = await api(`/api/stories/${id}/pick`);
+    if (r.refreshing) setUpdated('story picked — refreshing board…');
   }
 
   async function refresh() {
@@ -123,6 +171,22 @@ const StoryDesk = (() => {
         <p class="text-[12px] font-semibold uppercase tracking-wide text-sub mb-1.5">Sources (${(p.sources || []).length})</p>
         <p class="text-[13.5px]">${(p.sources || []).map(esc).join(' · ') || esc(p.publisher || '')}</p>
         ${p.url ? `<a href="${esc(p.url)}" target="_blank" class="text-[13px] text-blue6 hover:underline">Open lead article ↗</a>` : ''}
+      </div>
+
+      <div class="mb-4">
+        <p class="text-[12px] font-semibold uppercase tracking-wide text-sub mb-2">Score anatomy — ${p.score}/100</p>
+        <div class="space-y-1.5">${(p.breakdown || []).map(b => {
+          const pct = b.max_points ? Math.round(b.points / b.max_points * 100) : 0;
+          const bar = b.points > 0 ? '#1570EF' : '#E4E7EC';
+          return `
+          <div class="flex items-center gap-2 text-[12.5px]">
+            <span class="w-20 shrink-0 capitalize ${b.points > 0 ? '' : 'text-sub'}">${esc(b.variable)}</span>
+            <div class="flex-1 h-2.5 rounded-full bg-paper overflow-hidden">
+              <div class="h-full rounded-full" style="width:${pct}%;background:${bar}"></div>
+            </div>
+            <span class="w-11 shrink-0 text-right font-mono ${b.points > 0 ? 'text-blue6' : 'text-sub'}">${b.points}/${b.max_points}</span>
+          </div>`;
+        }).join('')}</div>
       </div>
 
       <div class="mb-4">

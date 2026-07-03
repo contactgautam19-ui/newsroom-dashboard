@@ -21,11 +21,24 @@ tailwind.config = { theme: { extend: { colors: {
   ::-webkit-scrollbar-thumb { background: #D0D5DD; border-radius: 4px; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   .fade-up { animation: fadeUp .35s ease-out; }
+  @keyframes flashIn { from { transform: translateY(-100%); } to { transform: none; } }
+  #flash-strip { animation: flashIn .3s ease-out; }
+  @keyframes flashPulse { 0%,100% { opacity: 1; } 50% { opacity: .75; } }
+  #flash-badge { animation: flashPulse 1.2s infinite; }
   .tab-active { background: #101828; color: #fff; }
   .chip-active { background: #101828; color: #fff; border-color: #101828; }
 </style>
 </head>
 <body class="text-ink text-[15px] min-h-screen">
+
+<!-- Flash strip: breaking / viral acceleration alerts -->
+<div id="flash-strip" class="hidden fixed top-0 inset-x-0 z-40 cursor-pointer" onclick="Flash.jump()">
+  <div id="flash-inner" class="flex items-center gap-3 px-4 py-2.5 text-white text-[14px] font-medium shadow-lg">
+    <span id="flash-badge" class="px-2 py-0.5 rounded font-bold text-[11px] tracking-widest bg-white/20"></span>
+    <span id="flash-title" class="truncate"></span>
+    <button onclick="event.stopPropagation();Flash.hide()" class="ml-auto text-white/70 hover:text-white px-1">✕</button>
+  </div>
+</div>
 
 <header class="sticky top-0 z-20 bg-white border-b border-line">
   <div class="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-3 flex-wrap">
@@ -53,6 +66,7 @@ tailwind.config = { theme: { extend: { colors: {
       </button>
       <div id="filters" class="flex gap-1.5 flex-wrap ml-auto"></div>
     </div>
+    <div id="board-mix" class="hidden md:flex items-center gap-4 bg-white border border-line rounded-xl px-4 py-2.5 mb-4"></div>
     <div id="story-list" class="space-y-2.5">
       <p class="text-sub text-[14px] py-8 text-center">Loading stories…</p>
     </div>

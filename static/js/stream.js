@@ -16,6 +16,12 @@
       const ev = JSON.parse(e.data);
       setUpdated(`↗ ${ev.hashtag} spiking on X`);
       setTimeout(() => setUpdated('live'), 6000);
+      Flash.show('viral', `${ev.hashtag} +${Math.round(ev.velocity_pct)}% — ${ev.story_title || ''}`, ev.story_id);
+    });
+
+    source.addEventListener('flash', e => {
+      const f = JSON.parse(e.data);
+      Flash.show(f.kind, f.title, f.story_id);
     });
 
     source.addEventListener('system_status', e => {

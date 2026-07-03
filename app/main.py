@@ -145,7 +145,7 @@ async def x_refresh():
 
 
 @app.post("/api/stories/{story_id}/pick")
-def pick_story(story_id: int):
+async def pick_story(story_id: int):
     from datetime import datetime, timezone
     with db.connect() as con:
         row = con.execute("SELECT picked FROM stories WHERE id=?", (story_id,)).fetchone()
@@ -156,7 +156,12 @@ def pick_story(story_id: int):
                     (picked, datetime.now(timezone.utc).isoformat() if picked else None,
                      story_id))
     ingest.publish_rundown()
-    return {"id": story_id, "picked": bool(picked)}
+    if picked:
+        # a picked story is handled — refresh in the background so the board
+        # backfills with the next candidates
+        asyncio.get_running_loop().run_in_executor(
+            None, lambda: ingest.run_ingest_cycle(manual=True))
+    return {"id": story_id, "picked": bool(picked), "refreshing": bool(picked)}
 
 
 @app.get("/api/stories/{story_id}/pack")
