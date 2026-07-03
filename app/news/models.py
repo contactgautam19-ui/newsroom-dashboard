@@ -33,6 +33,7 @@ class RawArticle:
     category_hint: str = ""             # from the source matrix Focus column
     source_rank: int = 99               # matrix rank (1 = highest priority)
     corroborators: list = field(default_factory=list)  # outlets in this cluster
+    discovered_via: str = ""            # trending keyword that surfaced this story
 
 
 @dataclass

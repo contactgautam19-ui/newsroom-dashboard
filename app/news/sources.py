@@ -113,15 +113,19 @@ def _cluster(articles: list[RawArticle]) -> list[RawArticle]:
         tokens = _sig_tokens(art.title)
         for c_tokens, lead in clusters:
             if _same_story(tokens, c_tokens):
-                if art.publisher not in lead.corroborators:
-                    lead.corroborators.append(art.publisher)
+                for pub in (art.corroborators or [art.publisher]):
+                    if pub and pub not in lead.corroborators:
+                        lead.corroborators.append(pub)
                 if len(art.summary) > len(lead.summary):
                     lead.summary = art.summary
                 if art.published_at < lead.published_at:
                     lead.published_at = art.published_at
+                if art.discovered_via and not lead.discovered_via:
+                    lead.discovered_via = art.discovered_via
                 c_tokens |= tokens
                 break
         else:
-            art.corroborators = [art.publisher]
+            if not art.corroborators:
+                art.corroborators = [art.publisher]
             clusters.append((tokens, art))
     return [lead for _, lead in clusters]

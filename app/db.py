@@ -99,9 +99,22 @@ def connect() -> sqlite3.Connection:
     return con
 
 
+MIGRATIONS = [
+    # keyword-driven discovery (2026-07): where a story was found + how many
+    # Trend Momentum points came from discovery vs the broker's live boost
+    "ALTER TABLE stories ADD COLUMN discovered_via TEXT",
+    "ALTER TABLE stories ADD COLUMN trend_base INTEGER NOT NULL DEFAULT 0",
+]
+
+
 def init_db() -> None:
     with connect() as con:
         con.executescript(SCHEMA)
+        for stmt in MIGRATIONS:
+            try:
+                con.execute(stmt)
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
 
 def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:

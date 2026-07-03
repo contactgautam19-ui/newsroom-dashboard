@@ -57,6 +57,16 @@ const NewsPanel = (() => {
       </div>`;
   }
 
+  function ageChip(iso) {
+    if (!iso) return '';
+    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    const label = mins < 60 ? `${mins}m ago`
+      : mins < 1440 ? `${Math.floor(mins / 60)}h ${mins % 60}m ago`
+      : `${Math.floor(mins / 1440)}d ago`;
+    const color = mins <= 60 ? 'text-verified' : mins <= 180 ? 'text-develop' : 'text-faint';
+    return `<span class="font-mono ${color}">● ${label}</span>`;
+  }
+
   function rowHtml(story, rank) {
     const st = STATUS_STYLE[story.status] || STATUS_STYLE.developing;
     const srcCount = (story.sources || []).length;
@@ -74,9 +84,11 @@ const NewsPanel = (() => {
           <div class="min-w-0 flex-1">
             <div class="text-white font-semibold truncate">${esc(story.title)}</div>
             <div class="text-[11px] text-dim flex gap-2 items-center flex-wrap">
+              ${ageChip(story.published_at)}
               <span>${esc(story.publisher || '')}</span>
               ${srcCount > 1 ? `<span class="text-verified">+${srcCount - 1} corroborating</span>` : '<span class="text-develop">single source</span>'}
               <span>· ${esc(story.category)} · ${esc(story.location)}</span>
+              ${story.discovered_via ? `<span class="px-1.5 rounded bg-accent/15 text-accent text-[10px]">🔍 ${esc(story.discovered_via)}</span>` : ''}
               ${flags}
             </div>
           </div>

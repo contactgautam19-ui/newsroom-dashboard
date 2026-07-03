@@ -39,6 +39,20 @@ STORIES_PER_CYCLE = _int("STORIES_PER_CYCLE", 5)
 X_PROVIDER = os.getenv("X_PROVIDER", "sim")
 SIM_TWEETS_PER_MIN = _int("SIM_TWEETS_PER_MIN", 12)
 
+# Keyword-driven fresh-story discovery (mirrors the manual editor workflow:
+# keyword -> Google News -> "Past hour" filter)
+NEWS_SEARCH_URL = os.getenv(
+    "NEWS_SEARCH_URL",
+    "https://news.google.com/rss/search?q={query}+when:1h&hl=en-IN&gl=IN&ceid=IN:en",
+)
+GOOGLE_TRENDS_RSS = os.getenv(
+    "GOOGLE_TRENDS_RSS", "https://trends.google.com/trending/rss?geo=IN"
+)
+DISCOVERY_KEYWORDS = _int("DISCOVERY_KEYWORDS", 8)   # keywords searched per cycle
+FRESHNESS_HOURS = _int("FRESHNESS_HOURS", 3)         # drop new candidates older than this
+RETIRE_HOURS = _int("RETIRE_HOURS", 12)              # retire board stories older than this
+X_TERM_WINDOW_MIN = _int("X_TERM_WINDOW_MIN", 30)    # X-desk hot-term lookback
+
 # Ranking / broker thresholds (from the PRD and Master Prompt)
 CONFIDENCE_REVIEW_THRESHOLD = 70          # below this -> NEEDS REVIEW flag
 SPIKE_THRESHOLD_PCT = 150                 # >150% volume spike in rolling window

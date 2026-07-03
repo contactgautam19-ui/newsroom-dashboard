@@ -51,9 +51,14 @@ const Ticker = (() => {
       if (el) {
         const t = new Date(data.last_ingest).toLocaleTimeString('en-IN', { hour12: false });
         const feeds = data.feeds_polled
-          ? ` · ${data.feeds_polled - (data.feeds_failed || 0)}/${data.feeds_polled} feeds · ${data.stories_clustered ?? '—'} clustered`
+          ? ` · ${data.feeds_polled - (data.feeds_failed || 0)}/${data.feeds_polled} feeds`
           : '';
-        el.textContent = `last ingest ${t}${feeds} · ${data.new_stories ?? 0} new · top score ${data.max_score ?? '—'}`;
+        const disco = data.keywords_searched
+          ? ` · ${data.keywords_searched} keywords → ${data.discovery_hits ?? 0} past-hour hits`
+          : '';
+        const stale = data.dropped_stale ? ` · ${data.dropped_stale} stale dropped` : '';
+        el.textContent = `last ingest ${t}${disco}${feeds}${stale} · ${data.new_stories ?? 0} new · top score ${data.max_score ?? '—'}`;
+        el.title = (data.keywords || []).join(', ');
       }
     }
   }

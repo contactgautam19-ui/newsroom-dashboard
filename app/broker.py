@@ -57,7 +57,7 @@ def run_broker_tick() -> list[dict]:
 
         stories = con.execute(
             "SELECT id, title, base_score, trend_boost, decay, confidence, "
-            "needs_review FROM stories WHERE active=1"
+            "needs_review, trend_base, discovered_via FROM stories WHERE active=1"
         ).fetchall()
 
         boosted_story_ids = set()
@@ -121,8 +121,11 @@ def run_broker_tick() -> list[dict]:
 
 def _apply_boost(con, story, term, boost, velocity_pct, posts_per_hour,
                  high_demand, now_iso) -> None:
-    new_boost = min(config.TREND_MOMENTUM_CAP,
-                    max(story["trend_boost"], boost))  # keep the strongest surge
+    # keep the strongest surge, but discovery base + boost never exceeds the
+    # variable's 15-point ceiling
+    trend_base = story["trend_base"] or 0
+    headroom = max(0, config.TREND_MOMENTUM_CAP - trend_base)
+    new_boost = min(headroom, max(story["trend_boost"], boost))
     needs_review = story["needs_review"]
     if high_demand and needs_review:
         needs_review = 0  # >5000/hr overrides the low-confidence hold
@@ -133,7 +136,13 @@ def _apply_boost(con, story, term, boost, velocity_pct, posts_per_hour,
         (new_boost, new_boost, int(high_demand), needs_review, now_iso, story["id"]),
     )
 
-    evidence = [
+    evidence = []
+    if story["discovered_via"]:
+        evidence.append(
+            f"surfaced via trending keyword '{story['discovered_via']}' "
+            "(past-hour Google News search)"
+        )
+    evidence += [
         f"VIRAL ACCELERATION: '{term}' volume +{velocity_pct:.0f}% in rolling 5-min window",
         f"~{posts_per_hour:.0f} posts/hour across monitored handles",
         f"dynamic offset +{new_boost} pts injected by X Conversation Broker",
@@ -145,5 +154,6 @@ def _apply_boost(con, story, term, boost, velocity_pct, posts_per_hour,
            VALUES (?,'trend',?,?,?)
            ON CONFLICT(story_id, variable) DO UPDATE SET
            points=excluded.points, evidence=excluded.evidence""",
-        (story["id"], config.TREND_MOMENTUM_CAP, new_boost, json.dumps(evidence)),
+        (story["id"], config.TREND_MOMENTUM_CAP, trend_base + new_boost,
+         json.dumps(evidence)),
     )

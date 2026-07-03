@@ -7,7 +7,7 @@ names; those are harvested into `sources` to power the two-source rule.
 import hashlib
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import feedparser
 import httpx
@@ -73,6 +73,9 @@ def _persist_story(con, story, score, confidence, verdict, now_iso) -> tuple[int
     flags = {k: v for k, v in story.flags.items() if not k.startswith("_")}
     media = {k: v for k, v in story.media.items() if not k.startswith("_")}
     sources = sorted(set(story.sources))
+    trend_base = next((b["points"] for b in score["breakdown"]
+                       if b["variable"] == "trend"), 0)
+    discovered_via = story.raw.discovered_via or None
 
     existing = con.execute(
         "SELECT id, sources, base_score, stale_cycles FROM stories WHERE dedup_key = ?",
@@ -88,10 +91,12 @@ def _persist_story(con, story, score, confidence, verdict, now_iso) -> tuple[int
         con.execute(
             """UPDATE stories SET last_updated_at=?, sources=?, base_score=?,
                decay=?, score=MAX(0, ? + trend_boost - ?), confidence=?, status=?,
-               needs_review=?, stale_cycles=?, active=1 WHERE id=?""",
+               needs_review=?, stale_cycles=?, trend_base=?,
+               discovered_via=COALESCE(?, discovered_via), active=1 WHERE id=?""",
             (now_iso, json.dumps(merged), score["total"], decay,
              score["total"], decay, confidence, verdict["status"],
-             int(verdict["needs_review"]), stale_cycles, existing["id"]),
+             int(verdict["needs_review"]), stale_cycles, trend_base,
+             discovered_via, existing["id"]),
         )
         story_id = existing["id"]
         is_new = False
@@ -99,13 +104,15 @@ def _persist_story(con, story, score, confidence, verdict, now_iso) -> tuple[int
         cur = con.execute(
             """INSERT INTO stories (dedup_key, title, url, publisher, published_at,
                first_seen_at, last_updated_at, location, category, flags, media,
-               sources, base_score, score, confidence, status, needs_review)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               sources, base_score, score, confidence, status, needs_review,
+               trend_base, discovered_via)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (key, story.raw.title, story.raw.url, story.raw.publisher,
              story.raw.published_at, now_iso, now_iso, story.location,
              story.category, json.dumps(flags), json.dumps(media),
              json.dumps(sources), score["total"], score["total"], confidence,
-             verdict["status"], int(verdict["needs_review"])),
+             verdict["status"], int(verdict["needs_review"]),
+             trend_base, discovered_via),
         )
         story_id = cur.lastrowid
         is_new = True
@@ -129,24 +136,42 @@ def _persist_story(con, story, score, confidence, verdict, now_iso) -> tuple[int
 def run_ingest_cycle(manual: bool = False) -> dict:
     """One full ingest -> enrich -> score -> guardrail -> persist cycle.
 
-    Primary source: the curated 50-source ingestion matrix (all active RSS
-    feeds polled concurrently, headlines clustered across outlets). Falls back
-    to Google News top stories if the matrix file is missing.
+    Two discovery lanes, clustered together:
+    1. Keyword lane (primary freshness signal): hot terms from the monitored X
+       accounts + live trending searches, each run through a past-hour Google
+       News search — the automated version of the editor's manual workflow.
+    2. The curated 50-source ingestion matrix for corroboration and coverage.
+
+    Anything older than FRESHNESS_HOURS is dropped before ranking so stale
+    evergreen items can't occupy the rundown.
     """
+    from app.news import discovery as discovery_mod
     from app.news import sources as sources_mod
 
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
     events.publish("system_status", {"state": "ingesting", "at": now_iso})
 
     feed_stats = {}
     try:
+        discovered, disco_stats = discovery_mod.fetch_discovery_articles()
+        feed_stats.update(disco_stats)
         if sources_mod.load_sources():
-            candidates, feed_stats = sources_mod.fetch_matrix_articles()
+            matrix_articles, matrix_stats = sources_mod.fetch_matrix_articles()
+            feed_stats.update(matrix_stats)
         else:
-            candidates = fetch_top_articles(config.STORIES_PER_CYCLE)
+            matrix_articles = fetch_top_articles(config.STORIES_PER_CYCLE)
+        # discovery hits first so they lead their clusters and keep the keyword
+        candidates = sources_mod._cluster(discovered + matrix_articles)
     except Exception as exc:
         events.publish("system_status", {"state": "ingest_error", "error": str(exc)})
         return {"ok": False, "error": str(exc), "stories": 0, "max_score": 0}
+
+    # Freshness gate: the whole point of the keyword lane is *latest* stories
+    cutoff = (now - timedelta(hours=config.FRESHNESS_HOURS)).isoformat()
+    fresh = [a for a in candidates if a.published_at >= cutoff]
+    feed_stats["dropped_stale"] = len(candidates) - len(fresh)
+    candidates = fresh
 
     # Score every clustered candidate, keep the strongest for the rundown
     scored = []
@@ -171,6 +196,15 @@ def run_ingest_cycle(manual: bool = False) -> dict:
             seen_ids.append(story_id)
             new_count += int(is_new)
             max_score = max(max_score, score["total"])
+
+        # retire anything published too long ago — an old story that keeps
+        # re-clustering must not occupy the "latest" board indefinitely
+        retire_cutoff = (now - timedelta(hours=config.RETIRE_HOURS)).isoformat()
+        retired = con.execute(
+            "UPDATE stories SET active=0 WHERE active=1 AND published_at < ?",
+            (retire_cutoff,),
+        ).rowcount
+        feed_stats["retired"] = retired
 
         # stories not in this cycle age one stale cycle (repetitive decay)
         if seen_ids:

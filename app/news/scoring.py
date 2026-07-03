@@ -113,9 +113,16 @@ def score_story(story: EnrichedStory) -> dict:
     matches = find_matches(text, NOVELTY_TERMS)
     add("novelty", 4 * len(matches), [f"novelty marker: '{m}'" for m in matches])
 
-    # Search Trend Momentum — 15: starts 0; the Conversation Broker injects the
-    # dynamic +1..+10 offset when a Viral Acceleration Event matches this story.
-    add("trend", 0, [])
+    # Search Trend Momentum — 15: discovery via a live trending keyword earns
+    # a 5-pt base (the story was *found* because the term is moving right now);
+    # the Conversation Broker layers its dynamic +1..+10 offset on top.
+    if story.raw.discovered_via:
+        add("trend", 5, [
+            f"surfaced via trending keyword '{story.raw.discovered_via}' "
+            "(past-hour Google News search)",
+        ])
+    else:
+        add("trend", 0, [])
 
     total = sum(b["points"] for b in breakdown)
     return {"total": total, "breakdown": breakdown}
