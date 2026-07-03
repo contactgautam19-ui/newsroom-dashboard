@@ -72,3 +72,5 @@ TREND_BOOST_MAX = 10
 TREND_MOMENTUM_CAP = 15                   # Search Trend Momentum max points
 FALLBACK_COOLDOWN_SECONDS = 300           # 5-minute re-ingest cooldown
 REPETITIVE_DECAY_PER_HOUR = 3             # points lost per stale hour
+REPETITIVE_DECAY_CAP = 15                 # decay never exceeds this
+NEWS_REFRESH_MINUTES = _int("NEWS_REFRESH_MINUTES", 10)  # auto story refresh (0 = hourly only)

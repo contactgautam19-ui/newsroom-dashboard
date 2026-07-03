@@ -1,99 +1,132 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Newsroom Intelligence Dashboard</title>
+<title>Newsroom</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
-tailwind.config = {
-  theme: { extend: { colors: {
-    ink: '#0F1419', panel: '#16202A', edge: '#22303C',
-    breaking: '#E02424', develop: '#D97706', verified: '#059669',
-    accent: '#1D9BF0', dim: '#8B98A5', faint: '#5C6B7A',
-  }}}
-}
+tailwind.config = { theme: { extend: { colors: {
+  paper: '#F6F7F9', ink: '#101828', sub: '#667085', line: '#E4E7EC',
+  brand: '#D92D20',
+  red1: '#FEF3F2', red6: '#D92D20', red8: '#912018',
+  amber1: '#FFFAEB', amber6: '#DC6803', amber8: '#7A3707',
+  green1: '#ECFDF3', green6: '#079455', green8: '#085D3A',
+  blue1: '#EFF8FF', blue6: '#1570EF', blue8: '#194185',
+}}}}
 </script>
 <style>
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-thumb { background: #22303C; border-radius: 3px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  @keyframes slideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-  .slide-in { animation: slideIn .45s ease-out; }
-  @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(224,36,36,.5); } 50% { box-shadow: 0 0 12px 2px rgba(224,36,36,.55); } }
-  .pulse-breaking { animation: pulseGlow 1.8s infinite; }
-  @keyframes flame { 0%,100% { transform: scale(1); } 50% { transform: scale(1.25) rotate(-6deg); } }
-  .flame { display:inline-block; animation: flame 1s infinite; }
-  @keyframes tickerPulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
-  .live-dot { animation: tickerPulse 1.6s infinite; }
+  body { background: #F6F7F9; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #D0D5DD; border-radius: 4px; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .fade-up { animation: fadeUp .35s ease-out; }
+  .tab-active { background: #101828; color: #fff; }
+  .chip-active { background: #101828; color: #fff; border-color: #101828; }
 </style>
 </head>
-<body class="h-full bg-ink text-gray-200 overflow-hidden text-[13px]">
-<div class="h-screen flex flex-col">
+<body class="text-ink text-[15px] min-h-screen">
 
-  <!-- Header -->
-  <header class="flex items-center gap-4 px-4 py-2 border-b border-edge bg-panel/60 shrink-0">
-    <div class="flex items-center gap-2">
-      <span class="w-2.5 h-2.5 rounded-full bg-breaking live-dot"></span>
-      <h1 class="font-bold tracking-widest text-white text-sm">NEWSROOM INTELLIGENCE</h1>
+<header class="sticky top-0 z-20 bg-white border-b border-line">
+  <div class="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-3 flex-wrap">
+    <div class="flex items-center gap-2 mr-1">
+      <span class="w-2.5 h-2.5 rounded-full bg-brand"></span>
+      <span class="font-semibold tracking-tight">Newsroom</span>
     </div>
-    <span id="clock" class="font-mono text-dim"></span>
-    <div id="sys-status" class="text-faint text-xs">connecting…</div>
-    <div class="ml-auto flex items-center gap-2">
-      <button id="auto-refresh" onclick="AutoRefresh.cycle()" title="Auto-refresh: re-run the source ingest on a timer" class="px-3 py-1 rounded border border-edge hover:border-accent transition-colors text-xs font-mono">AUTO ⟳ OFF</button>
-      <button onclick="api('/api/ingest')" class="px-3 py-1 rounded border border-edge hover:border-accent hover:text-accent transition-colors text-xs">⟳ Ingest now</button>
-      <button id="x-refresh-btn" onclick="XRefresh.run()" title="Fetch the latest real tweets from monitored handles (spends ~3 API calls)" class="px-3 py-1 rounded border border-accent/50 text-accent hover:bg-accent/10 transition-colors text-xs font-semibold">𝕏 Refresh tweets</button>
-      <button id="spike-btn" onclick="api('/api/sim/spike')" class="hidden px-3 py-1 rounded border border-edge hover:border-breaking hover:text-breaking transition-colors text-xs">🚀 Simulate spike</button>
-      <button onclick="api('/api/brief').then(()=>window.open('/api/briefings/latest'))" class="px-3 py-1 rounded border border-edge hover:border-verified hover:text-verified transition-colors text-xs">✉ Brief</button>
-    </div>
-  </header>
-
-  <!-- Section 1: AI News Monitoring Agent (top 50%) -->
-  <section class="h-[46%] flex flex-col border-b-2 border-edge">
-    <div class="flex items-center gap-3 px-4 py-1.5 text-xs text-dim uppercase tracking-wider shrink-0">
-      <span class="text-white font-semibold">AI News Monitoring Agent</span>
-      <span>· evidence-based 100-pt ranking · hourly loop 06:00–21:00</span>
-      <span id="ingest-info" class="ml-auto font-mono"></span>
-    </div>
-    <div id="news-rows" class="flex-1 overflow-y-auto px-3 pb-2 space-y-1.5"></div>
-  </section>
-
-  <!-- Velocity ticker -->
-  <div class="flex items-center gap-3 px-4 py-1 bg-panel/80 border-b border-edge shrink-0 overflow-hidden">
-    <span class="text-[10px] font-bold tracking-widest text-accent shrink-0">X CONVERSATION BROKER</span>
-    <div id="ticker" class="flex gap-6 text-xs text-dim whitespace-nowrap overflow-x-auto">
-      <span class="text-faint">monitoring term velocity…</span>
-    </div>
+    <nav class="flex gap-1 overflow-x-auto">
+      <button data-tab="stories" class="tab tab-active px-3.5 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap">Story desk</button>
+      <button data-tab="xdesk" class="tab px-3.5 py-1.5 rounded-full text-[13px] font-medium text-sub whitespace-nowrap hover:bg-paper">X desk</button>
+      <button data-tab="ops" class="tab px-3.5 py-1.5 rounded-full text-[13px] font-medium text-sub whitespace-nowrap hover:bg-paper">Ops</button>
+    </nav>
+    <span id="updated" class="ml-auto text-[12px] text-sub whitespace-nowrap">connecting…</span>
   </div>
+</header>
 
-  <!-- Section 2: X Monitoring Desk (bottom 50%) -->
-  <section class="flex-1 min-h-0 flex flex-col">
-    <div class="flex items-center gap-3 px-4 py-1.5 text-xs text-dim uppercase tracking-wider shrink-0">
-      <span class="text-white font-semibold">X Monitoring Desk</span>
-      <span id="x-layer" class="font-mono">layer: —</span>
-      <span id="x-budget" class="font-mono text-accent"></span>
-      <span class="ml-auto" id="x-stats"></span>
+<main class="max-w-6xl mx-auto px-4 py-5">
+
+  <!-- Story desk -->
+  <section id="page-stories">
+    <div class="flex items-center gap-2 flex-wrap mb-4">
+      <h1 class="text-[17px] font-semibold mr-1">Top stories right now</h1>
+      <button id="refresh-stories" class="flex items-center gap-1.5 text-[13px] font-medium px-3.5 py-1.5 rounded-full bg-white border border-line hover:border-ink transition-colors">
+        <span id="refresh-icon">⟳</span> Refresh stories
+      </button>
+      <div id="filters" class="flex gap-1.5 flex-wrap ml-auto"></div>
     </div>
-    <div class="flex-1 min-h-0 grid grid-cols-3 gap-px bg-edge px-3 pb-2">
-      <div class="flex flex-col min-h-0 bg-ink">
-        <div class="px-2 py-1 text-[10px] font-bold tracking-widest text-verified shrink-0">A · INSTITUTIONAL &amp; GOVERNMENT</div>
-        <div id="col-A" class="flex-1 overflow-y-auto space-y-1 pr-1"></div>
+    <div id="story-list" class="space-y-2.5">
+      <p class="text-sub text-[14px] py-8 text-center">Loading stories…</p>
+    </div>
+  </section>
+
+  <!-- X desk -->
+  <section id="page-xdesk" class="hidden">
+    <div class="flex items-center gap-3 flex-wrap mb-4">
+      <h1 class="text-[17px] font-semibold">Live from monitored handles</h1>
+      <button id="x-refresh-btn" class="flex items-center gap-1.5 text-[13px] font-medium px-3.5 py-1.5 rounded-full bg-white border border-line hover:border-ink transition-colors">𝕏 Refresh tweets</button>
+      <span id="x-budget" class="text-[12px] text-sub"></span>
+      <span id="x-note" class="text-[12px] text-sub ml-auto"></span>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div>
+        <p class="text-[11px] font-semibold tracking-wide text-green8 uppercase mb-2">Government &amp; wires</p>
+        <div id="col-A" class="space-y-2 md:max-h-[70vh] md:overflow-y-auto md:pr-1"></div>
       </div>
-      <div class="flex flex-col min-h-0 bg-ink">
-        <div class="px-2 py-1 text-[10px] font-bold tracking-widest text-develop shrink-0">B · RIVAL / COMPETITOR CHANNELS</div>
-        <div id="col-B" class="flex-1 overflow-y-auto space-y-1 pr-1"></div>
+      <div>
+        <p class="text-[11px] font-semibold tracking-wide text-amber8 uppercase mb-2">Rival channels</p>
+        <div id="col-B" class="space-y-2 md:max-h-[70vh] md:overflow-y-auto md:pr-1"></div>
       </div>
-      <div class="flex flex-col min-h-0 bg-ink">
-        <div class="px-2 py-1 text-[10px] font-bold tracking-widest text-accent shrink-0">C · FIELD REPORTERS &amp; RESPONDERS</div>
-        <div id="col-C" class="flex-1 overflow-y-auto space-y-1 pr-1"></div>
+      <div>
+        <p class="text-[11px] font-semibold tracking-wide text-blue8 uppercase mb-2">Field reporters</p>
+        <div id="col-C" class="space-y-2 md:max-h-[70vh] md:overflow-y-auto md:pr-1"></div>
       </div>
     </div>
   </section>
+
+  <!-- Ops -->
+  <section id="page-ops" class="hidden">
+    <h1 class="text-[17px] font-semibold mb-4">Operations</h1>
+    <div id="ops-metrics" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+
+    <div class="bg-white border border-line rounded-xl p-4 mb-4">
+      <p class="text-[13px] font-semibold mb-3">Controls</p>
+      <div class="flex items-center gap-3 flex-wrap text-[13px]">
+        <label class="flex items-center gap-2">Auto-refresh stories
+          <select id="news-interval" class="border border-line rounded-lg px-2 py-1 bg-white">
+            <option value="0">Hourly only</option>
+            <option value="5">Every 5 min</option>
+            <option value="10">Every 10 min</option>
+            <option value="30">Every 30 min</option>
+          </select>
+        </label>
+        <button onclick="Ops.ingestNow(this)" class="px-3 py-1.5 rounded-full border border-line bg-white hover:border-ink">⟳ Re-rank now</button>
+        <button onclick="XDesk.refresh()" class="px-3 py-1.5 rounded-full border border-line bg-white hover:border-ink">𝕏 Refresh tweets</button>
+        <button onclick="Ops.briefNow(this)" class="px-3 py-1.5 rounded-full border border-line bg-white hover:border-ink">✉ Email brief now</button>
+        <a href="/api/briefings/latest" target="_blank" class="px-3 py-1.5 rounded-full border border-line bg-white hover:border-ink">View latest brief</a>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="bg-white border border-line rounded-xl p-4">
+        <p class="text-[13px] font-semibold mb-2">Last story refresh</p>
+        <div id="ops-lastcycle" class="text-[13px] text-sub space-y-1"></div>
+      </div>
+      <div class="bg-white border border-line rounded-xl p-4">
+        <p class="text-[13px] font-semibold mb-2">Guardrails — recently filtered posts</p>
+        <div id="ops-discarded" class="text-[13px] text-sub space-y-2"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- Story pack modal -->
+<div id="pack-overlay" class="hidden fixed inset-0 z-30 bg-ink/40 p-3 md:p-8 overflow-y-auto" onclick="if(event.target===this)StoryDesk.closePack()">
+  <div class="max-w-2xl mx-auto bg-white rounded-2xl border border-line p-5 md:p-6 fade-up" id="pack-content"></div>
 </div>
 
-<script src="/static/js/news_panel.js"></script>
-<script src="/static/js/x_panel.js"></script>
-<script src="/static/js/ticker.js"></script>
+<script src="/static/js/app.js"></script>
+<script src="/static/js/story_desk.js"></script>
+<script src="/static/js/x_desk.js"></script>
+<script src="/static/js/ops.js"></script>
 <script src="/static/js/stream.js"></script>
 </body>
 </html>

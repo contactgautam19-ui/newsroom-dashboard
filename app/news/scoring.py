@@ -7,8 +7,18 @@ Weights: Breaking 15 | Emotion 15 | Political 12 | Celebrity 10 | Economy 12 |
 Public Safety 15 | Visual 8 | Novelty 8 | Search Trend Momentum 15 (broker-fed).
 """
 
+from datetime import datetime, timezone
+
 from app.news.enrich import find_matches
 from app.news.models import EnrichedStory
+
+
+def _age_minutes(published_iso: str) -> float | None:
+    try:
+        dt = datetime.fromisoformat(published_iso)
+        return (datetime.now(timezone.utc) - dt).total_seconds() / 60
+    except (ValueError, TypeError):
+        return None
 
 EMOTION_TERMS = {
     "fear": ["threat", "panic", "fear", "terror", "scare", "warning", "danger"],
@@ -19,7 +29,7 @@ EMOTION_TERMS = {
 }
 
 POWER_FIGURES = [
-    "pm ", "prime minister", "modi", "president", "chief minister", " cm ",
+    "pm", "prime minister", "modi", "president", "chief minister", "cm",
     "supreme court", "chief justice", "army", "air force", "navy", "cabinet",
     "home minister", "finance minister", "defence minister", "governor", "rbi governor",
 ]
@@ -58,29 +68,36 @@ def score_story(story: EnrichedStory) -> dict:
             "points": max(0, min(points, max_pts)), "evidence": evidence,
         })
 
-    # Breaking News Status — 15
+    # Breaking News Status — 15 ("immediate temporal priority": explicit
+    # markers score full; otherwise very fresh publication earns partial points)
     ev = _flag_evidence(story, "breaking")
+    age_min = _age_minutes(story.raw.published_at)
     if ev:
         add("breaking", 15, [f"breaking marker: '{m}'" for m in ev])
     elif _flag_evidence(story, "developing"):
-        add("breaking", 7, [f"developing marker: '{m}'" for m in _flag_evidence(story, "developing")])
+        add("breaking", 8, [f"developing marker: '{m}'" for m in _flag_evidence(story, "developing")])
+    elif age_min is not None and age_min <= 60:
+        add("breaking", 10, [f"published {age_min:.0f} min ago — immediate temporal priority"])
+    elif age_min is not None and age_min <= 180:
+        add("breaking", 6, [f"published {age_min/60:.1f} h ago — recent development"])
     else:
         add("breaking", 0, [])
 
-    # Audience Emotion — 15 (3 pts per distinct arousal trigger)
+    # Audience Emotion — 15 (a firing trigger carries meaningful weight:
+    # 8 for one distinct arousal trigger, 12 for two, 15 for three or more)
     emotion_hits = []
     for emotion, terms in EMOTION_TERMS.items():
         matches = find_matches(text, terms)
         if matches:
             emotion_hits.append(f"{emotion}: '{matches[0]}'")
-    add("emotion", 3 * len(emotion_hits), emotion_hits)
+    add("emotion", (0, 8, 12, 15)[min(3, len(emotion_hits))], emotion_hits)
 
     # Political Importance — 12 (full if a power center is named, else partial)
     power = find_matches(text, POWER_FIGURES)
     if power:
         add("political", 12, [f"power center: '{m}'" for m in power])
     elif story.flags.get("political"):
-        add("political", 6, [f"political term: '{m}'" for m in _flag_evidence(story, "political")])
+        add("political", 8, [f"political term: '{m}'" for m in _flag_evidence(story, "political")])
     else:
         add("political", 0, [])
 
@@ -88,36 +105,38 @@ def score_story(story: EnrichedStory) -> dict:
     ev = _flag_evidence(story, "celebrity")
     add("celebrity", 10 if ev else 0, [f"celebrity marker: '{m}'" for m in ev])
 
-    # Money/Economic Impact — 12 (4 pts per distinct economic term)
+    # Money/Economic Impact — 12 (8 for one economic vector, 12 for several)
     ev = _flag_evidence(story, "economy")
-    add("economy", 4 * len(ev), [f"economic impact: '{m}'" for m in ev])
+    add("economy", (0, 8, 12)[min(2, len(ev))],
+        [f"economic impact: '{m}'" for m in ev])
 
-    # Public Safety / Utility — 15 (disaster/violence/health hazards)
+    # Public Safety / Utility — 15 (10 for one hazard class, 15 for stacked)
     safety_ev = []
     for theme, weight_note in (("disaster", "active hazard"), ("violence", "public threat"),
                                ("health", "health hazard")):
         for m in _flag_evidence(story, theme):
             safety_ev.append(f"{weight_note}: '{m}'")
-    add("safety", 5 * len({e.split(":")[0] for e in safety_ev}) + (2 if len(safety_ev) > 2 else 0),
-        safety_ev)
+    classes = len({e.split(":")[0] for e in safety_ev})
+    add("safety", (0, 10, 15, 15)[min(3, classes)], safety_ev)
 
-    # Visual Potential — 8 (2 pts per rich-media indicator present)
+    # Visual Potential — 8 (4 pts per rich-media indicator present)
     media_ev = []
     for indicator, matches in story.media.get("_evidence", {}).items():
         media_ev.append(f"{indicator.replace('_', ' ')}: '{matches[0]}'")
     if story.media.get("image_count"):
         media_ev.append(f"images detected: {story.media['image_count']}")
-    add("visual", 2 * len(media_ev), media_ev)
+    add("visual", 4 * len(media_ev), media_ev)
 
-    # Unexpectedness / Novelty — 8 (4 pts per novelty marker)
+    # Unexpectedness / Novelty — 8 (5 for one marker, 8 for several)
     matches = find_matches(text, NOVELTY_TERMS)
-    add("novelty", 4 * len(matches), [f"novelty marker: '{m}'" for m in matches])
+    add("novelty", (0, 5, 8)[min(2, len(matches))],
+        [f"novelty marker: '{m}'" for m in matches])
 
     # Search Trend Momentum — 15: discovery via a live trending keyword earns
-    # a 5-pt base (the story was *found* because the term is moving right now);
-    # the Conversation Broker layers its dynamic +1..+10 offset on top.
+    # a 7-pt base (the story was *found* because the term is moving right now);
+    # the Conversation Broker layers its dynamic offset on top up to the cap.
     if story.raw.discovered_via:
-        add("trend", 5, [
+        add("trend", 7, [
             f"surfaced via trending keyword '{story.raw.discovered_via}' "
             "(past-hour Google News search)",
         ])

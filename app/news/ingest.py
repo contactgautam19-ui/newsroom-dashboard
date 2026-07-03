@@ -19,6 +19,8 @@ from app.news.models import RawArticle
 
 _norm_re = re.compile(r"[^a-z0-9 ]+")
 
+LAST_STATS: dict = {}  # most recent cycle stats, for the Ops page
+
 
 def _dedup_key(title: str) -> str:
     norm = _norm_re.sub("", title.lower())
@@ -171,7 +173,15 @@ def run_ingest_cycle(manual: bool = False) -> dict:
     cutoff = (now - timedelta(hours=config.FRESHNESS_HOURS)).isoformat()
     fresh = [a for a in candidates if a.published_at >= cutoff]
     feed_stats["dropped_stale"] = len(candidates) - len(fresh)
-    candidates = fresh
+
+    # Non-news recurring content never belongs on an editorial rundown
+    junk = re.compile(
+        r"lottery|horoscope|panchang|numerolog|astrolog|word of the day|"
+        r"wordle|crossword|gold rate|silver rate|petrol.{0,12}price today|quiz",
+        re.I,
+    )
+    candidates = [a for a in fresh if not junk.search(a.title)]
+    feed_stats["dropped_junk"] = len(fresh) - len(candidates)
 
     # Score every clustered candidate, keep the strongest for the rundown
     scored = []
@@ -205,25 +215,36 @@ def run_ingest_cycle(manual: bool = False) -> dict:
             (retire_cutoff,),
         ).rowcount
         feed_stats["retired"] = retired
+        # sweep previously-ingested junk off the board too
+        for row in con.execute("SELECT id, title FROM stories WHERE active=1"):
+            if junk.search(row["title"]):
+                con.execute("UPDATE stories SET active=0 WHERE id=?", (row["id"],))
 
-        # stories not in this cycle age one stale cycle (repetitive decay)
+        # stories not in this cycle age one stale cycle (repetitive decay) —
+        # at most once per hour regardless of refresh cadence, capped total
         if seen_ids:
             placeholders = ",".join("?" * len(seen_ids))
+            age_cutoff = (now - timedelta(minutes=55)).isoformat()
             con.execute(
                 f"""UPDATE stories SET stale_cycles = stale_cycles + 1,
-                    decay = (stale_cycles + 1) * ?,
-                    score = MAX(0, base_score + trend_boost - (stale_cycles + 1) * ?)
-                    WHERE active = 1 AND id NOT IN ({placeholders})""",
-                [config.REPETITIVE_DECAY_PER_HOUR, config.REPETITIVE_DECAY_PER_HOUR, *seen_ids],
+                    last_aged_at = ?,
+                    decay = MIN(?, (stale_cycles + 1) * ?),
+                    score = MAX(0, base_score + trend_boost
+                                - MIN(?, (stale_cycles + 1) * ?))
+                    WHERE active = 1 AND id NOT IN ({placeholders})
+                    AND (last_aged_at IS NULL OR last_aged_at < ?)""",
+                [now_iso, config.REPETITIVE_DECAY_CAP, config.REPETITIVE_DECAY_PER_HOUR,
+                 config.REPETITIVE_DECAY_CAP, config.REPETITIVE_DECAY_PER_HOUR,
+                 *seen_ids, age_cutoff],
             )
 
     publish_rundown()
-    events.publish("system_status", {
-        "state": "idle", "last_ingest": now_iso, "new_stories": new_count,
-        "max_score": max_score, "manual": manual, **feed_stats,
-    })
-    return {"ok": True, "stories": len(articles), "new": new_count,
-            "max_score": max_score, **feed_stats}
+    result = {"ok": True, "last_ingest": now_iso, "stories": len(articles),
+              "new_stories": new_count, "max_score": max_score, **feed_stats}
+    LAST_STATS.clear()
+    LAST_STATS.update(result)
+    events.publish("system_status", {"state": "idle", "manual": manual, **result})
+    return result
 
 
 def get_rundown(limit: int = 12) -> list[dict]:

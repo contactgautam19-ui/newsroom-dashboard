@@ -1,45 +1,42 @@
-// SSE client: single /api/stream connection routing typed events to panels.
-// EventSource auto-reconnects; we also backfill columns on (re)connect.
+// SSE client: one /api/stream connection routes typed events to the pages.
 
 (() => {
-  let source;
-
   function connect() {
-    source = new EventSource('/api/stream');
+    const source = new EventSource('/api/stream');
 
     source.addEventListener('rundown', e => {
-      NewsPanel.render(JSON.parse(e.data));
+      StoryDesk.render(JSON.parse(e.data));
     });
 
     source.addEventListener('tweet', e => {
-      XPanel.add(JSON.parse(e.data));
+      XDesk.add(JSON.parse(e.data));
     });
 
     source.addEventListener('velocity_event', e => {
       const ev = JSON.parse(e.data);
-      NewsPanel.onVelocity(ev);
-      Ticker.add(ev);
+      setUpdated(`↗ ${ev.hashtag} spiking on X`);
+      setTimeout(() => setUpdated('live'), 6000);
     });
 
     source.addEventListener('system_status', e => {
-      Ticker.status(JSON.parse(e.data));
+      const d = JSON.parse(e.data);
+      if (d.state === 'ingesting') setUpdated('refreshing stories…');
+      else if (d.last_ingest) setUpdated(`updated ${ageLabel(d.last_ingest)}`);
+      else if (d.x_error) XDesk.note(d.x_error);
     });
 
     source.addEventListener('x_refresh', e => {
-      XRefresh.budget(JSON.parse(e.data));
+      XDesk.budget(JSON.parse(e.data));
     });
 
-    source.onopen = () => {
-      const sys = document.getElementById('sys-status');
-      if (sys) sys.textContent = 'live';
-    };
-
-    source.onerror = () => {
-      const sys = document.getElementById('sys-status');
-      if (sys) sys.textContent = 'reconnecting…';
-    };
+    source.onopen = () => setUpdated('live');
+    source.onerror = () => setUpdated('reconnecting…');
   }
-
-  XPanel.backfill();
   connect();
+
+  setInterval(() => {
+    // keep relative times honest without any server chatter
+    const el = document.getElementById('updated');
+    if (el?.textContent?.startsWith('updated')) StoryDesk.render();
+  }, 60000);
 })();

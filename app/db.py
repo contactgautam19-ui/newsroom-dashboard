@@ -107,6 +107,10 @@ MIGRATIONS = [
     # real-tweet provenance (2026-07): rows without it predate the TwtAPI
     # integration and are simulated content
     "ALTER TABLE tweets ADD COLUMN provider TEXT NOT NULL DEFAULT 'simulated'",
+    # editor workflow (2026-07): picked stories + hourly (not per-cycle) decay
+    "ALTER TABLE stories ADD COLUMN picked INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE stories ADD COLUMN picked_at TEXT",
+    "ALTER TABLE stories ADD COLUMN last_aged_at TEXT",
 ]
 
 

@@ -134,10 +134,67 @@ async def manual_brief():
 
 @app.post("/api/x/refresh")
 async def x_refresh():
-    """Manual X-desk refresh — in twtapi mode this spends ~3 API calls."""
-    return await asyncio.get_running_loop().run_in_executor(
-        None, pipeline.manual_refresh
-    )
+    """Manual X-desk refresh (~3 API calls) followed by a free story re-rank,
+    so fresh tweets flow straight into keywords and rankings."""
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(None, pipeline.manual_refresh)
+    if result.get("ok"):
+        loop.run_in_executor(None, lambda: ingest.run_ingest_cycle(manual=True))
+        result["stories_refreshing"] = True
+    return result
+
+
+@app.post("/api/stories/{story_id}/pick")
+def pick_story(story_id: int):
+    from datetime import datetime, timezone
+    with db.connect() as con:
+        row = con.execute("SELECT picked FROM stories WHERE id=?", (story_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Story not found")
+        picked = 0 if row["picked"] else 1
+        con.execute("UPDATE stories SET picked=?, picked_at=? WHERE id=?",
+                    (picked, datetime.now(timezone.utc).isoformat() if picked else None,
+                     story_id))
+    ingest.publish_rundown()
+    return {"id": story_id, "picked": bool(picked)}
+
+
+@app.get("/api/stories/{story_id}/pack")
+def story_pack(story_id: int):
+    from app.news.pack import build_pack
+    pack = build_pack(story_id)
+    if pack is None:
+        raise HTTPException(404, "Story not found")
+    return pack
+
+
+@app.get("/api/ops")
+def ops_summary():
+    from app.news.sources import load_sources
+    with db.connect() as con:
+        briefs_today = con.execute(
+            "SELECT COUNT(*) c FROM briefings WHERE created_at >= date('now')"
+        ).fetchone()["c"]
+        discarded = db.rows_to_dicts(con.execute(
+            "SELECT handle, text, discard_reason, created_at FROM tweets "
+            "WHERE discarded=1 ORDER BY created_at DESC LIMIT 8").fetchall())
+        handles_count = con.execute("SELECT COUNT(*) c FROM handles").fetchone()["c"]
+    return {
+        "last_ingest": ingest.LAST_STATS,
+        "news_refresh_minutes": scheduler.get_news_interval(),
+        "email_enabled": config.EMAIL_ENABLED,
+        "briefs_today": briefs_today,
+        "handles_count": handles_count,
+        "sources_total": len(load_sources(active_only=False)),
+        "x_budget": pipeline.twtapi.last_status,
+        "discarded_recent": discarded,
+    }
+
+
+@app.post("/api/settings/news-refresh")
+def set_news_refresh(minutes: int):
+    scheduler.set_news_interval(minutes)
+    return {"news_refresh_minutes": scheduler.get_news_interval()}
 
 
 @app.get("/api/x/status")

@@ -52,8 +52,32 @@ def briefing_job() -> None:
     briefing.generate_and_send()
 
 
+_news_interval_minutes = config.NEWS_REFRESH_MINUTES
+
+
+def get_news_interval() -> int:
+    return _news_interval_minutes
+
+
+def set_news_interval(minutes: int) -> None:
+    """0 disables the interval (hourly cron still runs); otherwise stories
+    auto-refresh every N minutes within the active window."""
+    global _news_interval_minutes
+    _news_interval_minutes = max(0, min(120, minutes))
+    try:
+        scheduler.remove_job("news_interval")
+    except Exception:
+        pass
+    if _news_interval_minutes:
+        scheduler.add_job(hourly_ingest_job, "interval",
+                          minutes=_news_interval_minutes, id="news_interval")
+
+
 def start() -> None:
     scheduler.add_job(hourly_ingest_job, "cron", minute=0, id="hourly_ingest")
+    if config.NEWS_REFRESH_MINUTES:
+        scheduler.add_job(hourly_ingest_job, "interval",
+                          minutes=config.NEWS_REFRESH_MINUTES, id="news_interval")
     if not pipeline.manual_only:
         # simulated feed only — real providers are refreshed manually so the
         # monthly API budget is never spent by a background timer

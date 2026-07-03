@@ -43,4 +43,7 @@ def apply_guardrails(story: EnrichedStory, score: dict, confidence: int) -> dict
 
 
 def decay_for_stale_cycles(stale_cycles: int) -> int:
-    return stale_cycles * config.REPETITIVE_DECAY_PER_HOUR
+    # stale_cycles now advances at most once per hour (ingest aging query),
+    # and total decay is capped so frequent refreshes can't zero a story out
+    return min(config.REPETITIVE_DECAY_CAP,
+               stale_cycles * config.REPETITIVE_DECAY_PER_HOUR)

@@ -5,15 +5,16 @@ matched term (surfaced later as scoring evidence).
 """
 
 import re
+from functools import lru_cache
 
 from app.news.models import EnrichedStory, RawArticle
 
 THEME_TERMS = {
     "political": [
-        "pm ", "prime minister", "modi", "parliament", "lok sabha", "rajya sabha",
-        "chief minister", " cm ", "election", "bjp", "congress", "aap ", "cabinet",
+        "pm", "prime minister", "modi", "parliament", "lok sabha", "rajya sabha",
+        "chief minister", "cm", "election", "bjp", "congress", "aap", "cabinet",
         "minister", "president", "governor", "supreme court", "high court",
-        "assembly", "mla", "mp ", "opposition", "coalition", "bill ", "ordinance",
+        "assembly", "mla", "mp", "opposition", "coalition", "ordinance",
     ],
     "celebrity": [
         "bollywood", "actor", "actress", "cricketer", "kohli", "rohit sharma",
@@ -35,8 +36,8 @@ THEME_TERMS = {
     ],
     "disaster": [
         "earthquake", "flood", "cyclone", "landslide", "collapse", "derail",
-        "crash", "fire ", "blaze", "explosion", "rescue", "evacuat", "drown",
-        "cloudburst", "heatwave", "storm",
+        "crash", "fire", "blaze", "explosion", "rescue", "evacuate", "evacuation",
+        "drown", "drowns", "drowned", "cloudburst", "heatwave", "storm",
     ],
     "breaking": [
         "breaking", "just in", "live:", "live updates", "big breaking", "alert",
@@ -47,13 +48,13 @@ THEME_TERMS = {
 }
 
 MEDIA_TERMS = {
-    "live_feed": ["live:", "live updates", "watch live", "live visuals", "live coverage"],
+    "live_feed": ["live", "live updates", "watch live", "live visuals", "live coverage"],
     "drone_footage": ["drone", "aerial"],
     "police_action": ["police", "lathi", "crackdown", "raid", "arrest"],
-    "crowds": ["crowd", "protest", "rally", "gathering", "stampede", "march"],
+    "crowds": ["crowd", "crowds", "protest", "rally", "gathering", "stampede", "march"],
     "explosions": ["blast", "explosion", "explode"],
-    "floods": ["flood", "waterlogg", "submerg", "inundat"],
-    "fires": ["fire ", "blaze", "gutted", "inferno"],
+    "floods": ["flood", "floods", "waterlogging", "submerged", "inundated"],
+    "fires": ["fire", "blaze", "gutted", "inferno"],
 }
 
 CATEGORY_RULES = [
@@ -82,9 +83,16 @@ LOCATIONS = [
 ]
 
 
-def find_matches(text: str, terms: list[str]) -> list[str]:
-    low = " " + text.lower() + " "
-    return [t.strip() for t in terms if t in low]
+@lru_cache(maxsize=4096)
+def _term_re(term: str) -> re.Pattern:
+    # word-boundary match so 'factory' never matches 'actor' and '8pm'
+    # never matches 'pm'; multi-word terms match as phrases
+    return re.compile(r"(?<![a-z0-9])" + re.escape(term) + r"(?![a-z0-9])")
+
+
+def find_matches(text: str, terms) -> list[str]:
+    low = text.lower()
+    return [t for t in terms if _term_re(t).search(low)]
 
 
 def enrich(raw: RawArticle) -> EnrichedStory:
