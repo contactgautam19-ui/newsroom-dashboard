@@ -62,16 +62,14 @@ const XDesk = (() => {
   const AVATAR_COLORS = ['#2563EB', '#079455', '#DC6803', '#7A5AF8', '#DD2590'];
 
   function avatarHtml(s, i) {
-    if (s.avatar_url) {
-      return `<img src="${esc(s.avatar_url)}" alt="" class="w-10 h-10 rounded-full object-cover shrink-0 border border-line"
-        onerror="this.outerHTML='${avatarFallback(s, i).replace(/'/g, '&#39;')}'">`;
-    }
-    return avatarFallback(s, i);
-  }
-
-  function avatarFallback(s, i) {
     const letter = (s.display_name || s.handle || '?').replace('@', '').charAt(0).toUpperCase();
-    return `<div class="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white text-[15px] font-bold" style="background:${AVATAR_COLORS[i % AVATAR_COLORS.length]}">${letter}</div>`;
+    const fallback = `<div class="w-10 h-10 rounded-full shrink-0 items-center justify-center text-white text-[15px] font-bold"
+      style="background:${AVATAR_COLORS[i % AVATAR_COLORS.length]};display:${s.avatar_url ? 'none' : 'flex'}">${letter}</div>`;
+    const img = s.avatar_url
+      ? `<img src="${esc(s.avatar_url)}" alt="" class="w-10 h-10 rounded-full object-cover shrink-0 border border-line"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      : '';
+    return `<div class="shrink-0 flex">${img}${fallback}</div>`;
   }
 
   // Sharp signal card: who posted, what the post says, why it ranks.

@@ -16,16 +16,18 @@ from app import db
 WINDOW_HOURS = 6
 TOP_N = 5
 
+# Weights per guardrail news signal (rule 5) — the primary metric.
 SIGNAL_WEIGHTS = {
     "breaking announcement": 25,
     "official document": 22,
     "court order": 22,
     "public safety": 22,
     "government notification": 20,
+    "investigation": 20,
+    "company filing": 18,
     "exclusive reporting": 18,
     "press conference": 15,
-    "eyewitness/ground report": 15,
-    "update/developing": 10,
+    "eyewitness report": 15,
 }
 
 _word_re = re.compile(r"[^a-z0-9 ]")
@@ -76,6 +78,8 @@ def top_signals() -> list[dict]:
             "SELECT DISTINCT term FROM velocity_events WHERE created_at >= ?",
             (since,))}
 
+    from app.x.guardrails import detect_signal
+
     scored = []
     for t in tweets:
         if len((t.get("text") or "").strip()) < 25:
@@ -84,6 +88,21 @@ def top_signals() -> list[dict]:
         score = 0
         reasons = []
 
+        # re-detect against the current rules so stored rows can't carry a
+        # stale or wrongly-attributed signal label
+        signal = detect_signal(t.get("text") or "")
+
+        linked = None
+        for sid, title, tokens in stories:
+            if len(terms & tokens) >= 2:
+                linked = {"story_id": sid, "story_title": title}
+                break
+
+        # Rule 5 gate: no news signal and no board-story match means this
+        # post is not alert-worthy, however trusted or fresh the handle.
+        if not signal and not linked:
+            continue
+
         trust = t.get("trust_score", 0)
         score += round(trust * 0.3)
         if trust >= 90:
@@ -91,18 +110,13 @@ def top_signals() -> list[dict]:
         elif trust >= 75:
             reasons.append("high-trust source")
 
-        signal = t.get("news_signal")
         if signal:
             score += SIGNAL_WEIGHTS.get(signal, 10)
             reasons.append(signal)
 
-        linked = None
-        for sid, title, tokens in stories:
-            if len(terms & tokens) >= 2:
-                linked = {"story_id": sid, "story_title": title}
-                score += 20
-                reasons.append("matches a board story")
-                break
+        if linked:
+            score += 20
+            reasons.append("matches a board story")
 
         if terms & trending:
             score += 10

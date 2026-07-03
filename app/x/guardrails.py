@@ -11,6 +11,8 @@ Discarded tweets are still stored (discarded=1 + reason) to keep the audit
 trail rule 19/"Audit trail" asks for.
 """
 
+import re
+
 from app.x.models import Tweet
 
 PERSONAL_NOISE = [
@@ -24,17 +26,52 @@ ENGAGEMENT_BAIT = [
     "thank you for", "followers", "retweet if", "poll:", "tag someone",
 ]
 
+# The ten news signals from the guardrails document (rule 5), exactly.
+# Word-boundary matched so 'documentation' never reads as 'document' and
+# a ministry PR post never counts as a government notification.
 NEWS_SIGNALS = {
-    "breaking announcement": ["breaking", "just in", "big breaking"],
-    "official document": ["notification", "circular", "gazette", "filing", "document"],
-    "court order": ["court", "verdict", "judgment", "bail", "hearing", "plea"],
-    "government notification": ["ministry", "govt", "government", "notifies", "cabinet"],
-    "press conference": ["press conference", "presser", "briefing", "statement"],
-    "exclusive reporting": ["exclusive", "sources confirm", "sources say", "accessed"],
-    "eyewitness/ground report": ["visuals", "#watch", "ground report", "on the spot", "from the ground"],
-    "public safety": ["alert", "advisory", "evacuation", "rescue", "warning", "casualties"],
-    "update/developing": ["update:", "developing", "confirms", "announced", "cleared"],
+    "breaking announcement": ["breaking", "just in", "big breaking", "flash"],
+    "official document": ["gazette", "circular", "official document",
+                          "memorandum", "order copy", "white paper"],
+    "court order": ["court", "verdict", "judgment", "judgement", "bail",
+                    "remanded", "custody", "tribunal", "acquitted", "convicted"],
+    "government notification": ["notifies", "notified", "notification",
+                                "ordinance", "gazetted", "cabinet approves",
+                                "cabinet clears"],
+    "company filing": ["filing", "sebi", "regulatory filing", "exchange filing",
+                       "ipo", "quarterly results", "agm"],
+    "press conference": ["press conference", "presser", "media briefing",
+                         "press briefing", "addresses media"],
+    "exclusive reporting": ["exclusive", "scoop", "sources confirm",
+                            "sources say", "accessed"],
+    "investigation": ["investigation", "probe", "raid", "raids", "arrested",
+                      "arrest", "seized", "chargesheet", "fir", "detained"],
+    "eyewitness report": ["ground report", "on the spot", "visuals from",
+                          "eyewitness", "from the ground", "ground zero"],
+    "public safety": ["red alert", "orange alert", "advisory", "evacuation",
+                      "evacuated", "rescue", "warning issued", "casualties",
+                      "death toll", "alert issued"],
 }
+
+_term_cache: dict[str, "re.Pattern"] = {}
+
+
+def _matches(text_lower: str, term: str) -> bool:
+    pat = _term_cache.get(term)
+    if pat is None:
+        pat = re.compile(r"(?<![a-z0-9])" + re.escape(term) + r"(?![a-z0-9])")
+        _term_cache[term] = pat
+    return bool(pat.search(text_lower))
+
+
+def detect_signal(text: str) -> str | None:
+    """Which guardrail news signal (if any) this text carries."""
+    low = text.lower()
+    for name, terms in NEWS_SIGNALS.items():
+        if any(_matches(low, t) for t in terms):
+            return name
+    return None
+
 
 TRUST_FLOOR = 50  # below: ignore unless independently verified (rule 6)
 
@@ -44,12 +81,12 @@ def evaluate(tweet: Tweet) -> dict:
     low = tweet.text.lower()
 
     for term in PERSONAL_NOISE:
-        if term in low:
+        if _matches(low, term):
             return {"keep": False, "reason": f"personal/lifestyle content ('{term}')",
                     "news_signal": None}
 
     for term in ENGAGEMENT_BAIT:
-        if term in low:
+        if _matches(low, term):
             return {"keep": False, "reason": f"engagement farming ('{term}')",
                     "news_signal": None}
 
@@ -58,12 +95,6 @@ def evaluate(tweet: Tweet) -> dict:
                 "reason": f"trust score {tweet.trust_score} below floor {TRUST_FLOOR}",
                 "news_signal": None}
 
-    signal = None
-    for name, terms in NEWS_SIGNALS.items():
-        if any(t in low for t in terms):
-            signal = name
-            break
-
     # No news signal: keep in the column for context, but it carries no
     # alert weight and its terms still feed broker volume counts.
-    return {"keep": True, "reason": None, "news_signal": signal}
+    return {"keep": True, "reason": None, "news_signal": detect_signal(tweet.text)}
