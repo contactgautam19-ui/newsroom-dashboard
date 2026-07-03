@@ -1,10 +1,18 @@
 # Newsroom Intelligence Dashboard
 
-A single-screen, dark-theme newsroom dashboard combining two live systems:
+A light-theme, editor-first newsroom dashboard with three pages:
 
-- **Top half — AI News Monitoring Agent**: every cycle (hourly 06:00–21:00, or faster via AUTO refresh) it (1) collects hot keywords from the monitored X accounts and Google Trends India, (2) runs each through a **past-hour Google News search** (`when:1h` — the automated version of the editor's manual keyword → News → Past hour workflow), (3) polls the curated 50-source RSS matrix, then clusters everything cross-outlet, drops candidates older than `FRESHNESS_HOURS` (3h), retires board stories older than `RETIRE_HOURS` (12h), and ranks the survivors on the evidence-based 100-point framework with editorial guardrails (two-source rule, <70% confidence review flag, repetitive decay). Stories found via a trending keyword carry a 🔍 chip and earn Search Trend Momentum points with the keyword cited as evidence.
-- **Bottom half — X Monitoring Desk**: three independently scrolling columns (A: Institutional & Government, B: Rival/Competitor Channels, C: Field Reporters & Responders) showing **real tweets** (exact text, actual post time) from the 242-handle India X master database via TwtAPI, filtered by editorial guardrails. Refresh is **manual-only** (`𝕏 Refresh tweets` button) to respect the monthly API budget: each refresh spends one Search call per column (~3 total) covering the top-trust handles, and the header shows the remaining monthly calls after every refresh. If the API is unavailable the columns stay quiet — the desk never shows fabricated content. (`X_PROVIDER=sim` in `.env` switches back to the clearly-labelled simulated demo feed, which is auto-purged whenever real mode is active.)
-- **X Conversation Broker**: every 60s aggregates term volume across scraped tweets; a >150% spike in a rolling 5-minute window matching an active headline fires a *Viral Acceleration Event*, injecting a +1..+10 point offset into that story's Search Trend Momentum score and rendering an inline `X TREND ACCELERATION` sub-row. Surges past 5,000 posts/hour override low-confidence holds and elevate to a *High-Demand Airtime Recommendation*.
+- **Story desk** (home): the decision page. Ranked story cards with a score badge, status pill, freshness age, and a plain-English "Why" line; category/Breaking filters; a refresh button (stories also auto-refresh every 10 minutes within the active window — configurable in Ops). **Pick story** marks a story as taken; **Story pack** opens everything a writer needs: all corroborating sources, the evidence trail, related posts from monitored X handles, and per-platform format suggestions (X / Instagram / Facebook, per the PRD omnichannel framework).
+- **X desk**: three columns of real tweets with manual refresh and the API budget badge.
+- **Ops**: the machinery — feed health, keywords searched, guardrail audit, auto-refresh interval, email brief controls. Editors never need this page.
+
+The layout is fully responsive (columns stack, tabs scroll on phones).
+
+## The two engines behind it
+
+- **AI News Monitoring Agent**: every cycle (hourly 06:00–21:00, or faster via AUTO refresh) it (1) collects hot keywords from the monitored X accounts and Google Trends India, (2) runs each through a **past-hour Google News search** (`when:1h` — the automated version of the editor's manual keyword → News → Past hour workflow), (3) polls the curated 50-source RSS matrix, then clusters everything cross-outlet, drops candidates older than `FRESHNESS_HOURS` (3h), retires board stories older than `RETIRE_HOURS` (12h), and ranks the survivors on the evidence-based 100-point framework with editorial guardrails (two-source rule, <70% confidence review flag, repetitive decay). Stories found via a trending keyword carry a 🔍 chip and earn Search Trend Momentum points with the keyword cited as evidence.
+- **X Monitoring Desk**: three independently scrolling columns (A: Institutional & Government, B: Rival/Competitor Channels, C: Field Reporters & Responders) showing **real tweets** (exact text, actual post time) from the 242-handle India X master database via TwtAPI, filtered by editorial guardrails. Refresh is **manual-only** (`𝕏 Refresh tweets` button) to respect the monthly API budget: each refresh spends one Search call per column (~3 total) covering the top-trust handles, and the header shows the remaining monthly calls after every refresh. If the API is unavailable the columns stay quiet — the desk never shows fabricated content. (`X_PROVIDER=sim` in `.env` switches back to the clearly-labelled simulated demo feed, which is auto-purged whenever real mode is active.)
+- **X Conversation Broker**: every 60s aggregates term volume across scraped tweets; a >150% spike in a rolling 5-minute window matching an active headline fires a *Viral Acceleration Event*, injecting a dynamic offset into that story's Search Trend Momentum score (capped at the variable's 15 points) and showing a "trending on X" chip on the story card. Surges past 5,000 posts/hour override low-confidence holds and elevate to a *High-Demand Airtime Recommendation*.
 
 Built from the specification documents in `AI Newsroom 3` (Master Prompt, Newsroom Dashboard MVP PRD, X Intelligence Dashboard spec, X Monitoring Guardrails, India X master database).
 
@@ -43,13 +51,18 @@ python scripts/import_handles.py "path\to\india_x_master_database_1.xlsx"
 
 | Endpoint | What it does |
 |---|---|
-| `POST /api/ingest` | Run a Google News ingest cycle now |
-| `POST /api/sim/spike` | Flood the top story's terms for 5 min — watch the Viral Acceleration → score-boost loop fire |
+| `POST /api/ingest` | Run a story refresh (discovery + matrix) now |
+| `POST /api/x/refresh` | Fetch real tweets (~3 API calls), then chain a free story re-rank |
+| `POST /api/stories/{id}/pick` | Toggle a story's picked state |
+| `GET /api/stories/{id}/pack` | Story pack: sources, evidence, related tweets, format suggestions |
 | `POST /api/brief` | Generate (and send, if enabled) a brief now |
+| `POST /api/settings/news-refresh?minutes=N` | Set the auto-refresh interval (0 = hourly only) |
+| `GET /api/ops` | Ops summary: last cycle stats, budget, guardrail audit |
 | `GET /api/rundown` | Ranked stories + score breakdowns (JSON) |
 | `GET /api/velocity` | Recent velocity events |
+| `POST /api/sim/spike` | Demo viral spike (only with `X_PROVIDER=sim`) |
 
-The header buttons trigger the same actions from the UI.
+Every action is also available from the UI (Story desk and Ops pages).
 
 ## Architecture
 
