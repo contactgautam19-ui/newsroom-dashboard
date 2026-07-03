@@ -8,8 +8,11 @@
       StoryDesk.render(JSON.parse(e.data));
     });
 
+    let signalsTimer = null;
     source.addEventListener('tweet', e => {
       XDesk.add(JSON.parse(e.data));
+      clearTimeout(signalsTimer);
+      signalsTimer = setTimeout(() => XDesk.loadSignals(), 1500);
     });
 
     source.addEventListener('velocity_event', e => {

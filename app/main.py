@@ -202,6 +202,12 @@ def set_news_refresh(minutes: int):
     return {"news_refresh_minutes": scheduler.get_news_interval()}
 
 
+@app.get("/api/x/top-signals")
+def x_top_signals():
+    from app.x.signals import top_signals
+    return top_signals()
+
+
 @app.get("/api/x/status")
 def x_status():
     return {"provider": config.X_PROVIDER, "layer": pipeline.active_layer,
