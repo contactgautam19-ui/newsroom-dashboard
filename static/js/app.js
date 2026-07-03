@@ -1,4 +1,4 @@
-// Shared helpers + tab navigation.
+// Shared helpers, sidebar navigation, header clock/live state, flash strip.
 
 function esc(s) {
   const d = document.createElement('div');
@@ -29,41 +29,98 @@ function postedLabel(iso) {
   } catch { return ''; }
 }
 
-const Tabs = (() => {
-  const pages = { stories: 'page-stories', xdesk: 'page-xdesk', ops: 'page-ops' };
+// Sidebar navigation. Views map onto three page sections plus two extra
+// views; My Picks / Assignments / Top Stories are filtered story views.
+const Nav = (() => {
+  const VIEWS = {
+    stories: { page: 'page-stories', nav: 'stories', title: 'Story Desk', subtitle: 'Your command center for real-time editorial decisions.' },
+    top: { page: 'page-stories', nav: 'top', title: 'Top Stories', subtitle: 'The full ranked board, highest score first.', filter: 'All' },
+    picks: { page: 'page-stories', nav: 'picks', title: 'My Picks', subtitle: 'Stories you have taken for coverage.', filter: 'Picked' },
+    assignments: { page: 'page-stories', nav: 'assignments', title: 'Assignments', subtitle: 'Everything currently being worked on.', filter: 'Picked' },
+    xdesk: { page: 'page-xdesk', nav: 'xdesk', title: 'X Desk', subtitle: 'Real posts from monitored handles, ranked for action.' },
+    ops: { page: 'page-ops', nav: 'ops', title: 'Ops Desk', subtitle: 'System health, controls, and guardrail audit.' },
+    analytics: { page: 'page-analytics', nav: 'analytics', title: 'Analytics', subtitle: 'Board balance and scoring anatomy.' },
+    alerts: { page: 'page-alerts', nav: 'alerts', title: 'Alerts', subtitle: 'Breaking flashes and viral acceleration events.' },
+  };
+  const PAGES = ['page-stories', 'page-xdesk', 'page-ops', 'page-analytics', 'page-alerts'];
+  let current = 'stories';
 
-  function show(name) {
-    Object.entries(pages).forEach(([key, id]) => {
-      document.getElementById(id).classList.toggle('hidden', key !== name);
+  function go(name) {
+    const v = VIEWS[name] || VIEWS.stories;
+    current = name;
+    PAGES.forEach(id => document.getElementById(id).classList.toggle('hidden', id !== v.page));
+    document.getElementById('page-title').textContent = v.title;
+    document.getElementById('page-subtitle').textContent = v.subtitle;
+    document.querySelectorAll('.navlink').forEach(b => {
+      b.classList.remove('active', 'active-soft');
+      if (b.dataset.nav === v.nav) {
+        b.classList.add(['stories', 'xdesk', 'ops'].includes(v.nav) ? 'active' : 'active-soft');
+      }
     });
-    document.querySelectorAll('.tab').forEach(b => {
-      const active = b.dataset.tab === name;
-      b.classList.toggle('tab-active', active);
-      b.classList.toggle('text-sub', !active);
-    });
+    if (v.filter) StoryDesk.setFilter(v.filter);
+    else if (v.page === 'page-stories') StoryDesk.setFilter('All');
     if (name === 'ops') Ops.load();
+    if (name === 'analytics') Views.analytics();
+    if (name === 'alerts') Views.alerts();
+    if (window.innerWidth < 1024) hideSidebar();
     location.hash = name;
   }
 
-  document.querySelectorAll('.tab').forEach(b =>
-    b.addEventListener('click', () => show(b.dataset.tab)));
+  function toggleSidebar() {
+    const sb = document.getElementById('sidebar');
+    const bd = document.getElementById('sidebar-backdrop');
+    const open = sb.classList.contains('hidden');
+    sb.classList.toggle('hidden', !open);
+    sb.classList.toggle('flex', open);
+    bd.classList.toggle('hidden', !open);
+  }
 
-  const initial = location.hash.replace('#', '');
-  if (pages[initial]) show(initial);
-  return { show };
+  function hideSidebar() {
+    if (window.innerWidth >= 1024) return;
+    document.getElementById('sidebar').classList.add('hidden');
+    document.getElementById('sidebar').classList.remove('flex');
+    document.getElementById('sidebar-backdrop').classList.add('hidden');
+  }
+
+  return { go, toggleSidebar, get current() { return current; } };
 })();
 
+function setLive(state) {
+  const dot = document.getElementById('live-dot');
+  const label = document.getElementById('live-label');
+  if (!dot) return;
+  dot.style.background = state === 'live' ? '#079455' : state === 'busy' ? '#DC6803' : '#D92D20';
+  label.textContent = state === 'live' ? 'Live' : state === 'busy' ? 'Refreshing' : 'Offline';
+}
+
 function setUpdated(text) {
-  const el = document.getElementById('updated');
+  const el = document.getElementById('refresh-label');
   if (el) el.textContent = text;
 }
 
+(function clock() {
+  const el = document.getElementById('clock');
+  function tick() {
+    const now = new Date();
+    if (el) el.textContent = now.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })
+      + ' · ' + now.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  tick();
+  setInterval(tick, 15000);
+})();
+
+let alertCount = 0;
+function bumpAlerts() {
+  alertCount += 1;
+  const b = document.getElementById('alert-badge');
+  if (b) { b.textContent = alertCount > 9 ? '9+' : alertCount; b.classList.remove('hidden'); }
+}
+
 // Flash strip: slides down for new breaking stories and viral X spikes.
-// Deduped per story+kind for 5 minutes so sustained spikes don't spam.
 const Flash = (() => {
   const KINDS = {
     breaking: { badge: 'FLASH · BREAKING', bg: '#D92D20' },
-    viral: { badge: 'VIRAL ON X', bg: '#1570EF' },
+    viral: { badge: 'VIRAL ON X', bg: '#2563EB' },
   };
   const recent = new Map();
   let timer = null;
@@ -73,6 +130,7 @@ const Flash = (() => {
     const key = `${kind}:${storyId ?? title}`;
     if (recent.has(key) && Date.now() - recent.get(key) < 300000) return;
     recent.set(key, Date.now());
+    bumpAlerts();
     const cfg = KINDS[kind] || KINDS.breaking;
     document.getElementById('flash-inner').style.background = cfg.bg;
     document.getElementById('flash-badge').textContent = cfg.badge;
@@ -93,12 +151,12 @@ const Flash = (() => {
 
   function jump() {
     hide();
-    Tabs.show('stories');
+    Nav.go('stories');
     if (targetId) {
       const card = document.querySelector(`article[data-id="${targetId}"]`);
       if (card) {
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        card.style.outline = '2px solid #1570EF';
+        card.style.outline = '2px solid #2563EB';
         setTimeout(() => { card.style.outline = ''; }, 2500);
       }
     }
@@ -106,3 +164,9 @@ const Flash = (() => {
 
   return { show, hide, jump };
 })();
+
+window.addEventListener('DOMContentLoaded', () => {
+  const initial = location.hash.replace('#', '');
+  if (initial && initial !== 'stories') Nav.go(initial);
+  else Nav.go('stories');
+});

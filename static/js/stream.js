@@ -17,8 +17,6 @@
 
     source.addEventListener('velocity_event', e => {
       const ev = JSON.parse(e.data);
-      setUpdated(`↗ ${ev.hashtag} spiking on X`);
-      setTimeout(() => setUpdated('live'), 6000);
       Flash.show('viral', `${ev.hashtag} +${Math.round(ev.velocity_pct)}% — ${ev.story_title || ''}`, ev.story_id);
     });
 
@@ -29,8 +27,8 @@
 
     source.addEventListener('system_status', e => {
       const d = JSON.parse(e.data);
-      if (d.state === 'ingesting') setUpdated('refreshing stories…');
-      else if (d.last_ingest) setUpdated(`updated ${ageLabel(d.last_ingest)}`);
+      if (d.state === 'ingesting') { setLive('busy'); setUpdated('refreshing…'); }
+      else if (d.last_ingest) { setLive('live'); setUpdated(`Refreshed ${ageLabel(d.last_ingest)}`); }
       else if (d.x_error) XDesk.note(d.x_error);
     });
 
@@ -38,14 +36,10 @@
       XDesk.budget(JSON.parse(e.data));
     });
 
-    source.onopen = () => setUpdated('live');
-    source.onerror = () => setUpdated('reconnecting…');
+    source.onopen = () => setLive('live');
+    source.onerror = () => setLive('offline');
   }
   connect();
 
-  setInterval(() => {
-    // keep relative times honest without any server chatter
-    const el = document.getElementById('updated');
-    if (el?.textContent?.startsWith('updated')) StoryDesk.render();
-  }, 60000);
+  setInterval(() => StoryDesk.render(), 60000); // keep relative times honest
 })();

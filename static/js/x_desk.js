@@ -61,10 +61,10 @@ const XDesk = (() => {
 
   function signalCard(s, rank) {
     const jump = s.linked_story
-      ? `<button onclick="Tabs.show('stories');setTimeout(()=>{const c=document.querySelector('article[data-id=\\'${s.linked_story.story_id}\\']');if(c){c.scrollIntoView({behavior:'smooth',block:'center'});c.style.outline='2px solid #1570EF';setTimeout(()=>c.style.outline='',2500);}},150)" class="text-[11.5px] text-blue6 hover:underline text-left">↗ ${esc(s.linked_story.story_title.slice(0, 60))}…</button>`
+      ? `<button onclick="Nav.go('stories');setTimeout(()=>{const c=document.querySelector('article[data-id=\\'${s.linked_story.story_id}\\']');if(c){c.scrollIntoView({behavior:'smooth',block:'center'});c.style.outline='2px solid #2563EB';setTimeout(()=>c.style.outline='',2500);}},150)" class="text-[11.5px] text-blue6 hover:underline text-left">↗ ${esc(s.linked_story.story_title.slice(0, 60))}…</button>`
       : '';
     return `
-      <div class="fade-up bg-white border border-line rounded-xl p-3 flex gap-3" style="border-left:3px solid #1570EF">
+      <div class="fade-up bg-white border border-line rounded-2xl p-3.5 flex gap-3" style="border-left:4px solid #2563EB">
         <div class="text-center shrink-0">
           <div class="w-8 h-8 rounded-full bg-blue1 text-blue8 flex items-center justify-center text-[13px] font-semibold">${rank}</div>
           <div class="text-[10px] text-sub mt-0.5 font-mono">${s.score}</div>

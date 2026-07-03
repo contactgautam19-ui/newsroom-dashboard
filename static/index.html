@@ -6,17 +6,24 @@
 <title>Newsroom</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
-tailwind.config = { theme: { extend: { colors: {
-  paper: '#F6F7F9', ink: '#101828', sub: '#667085', line: '#E4E7EC',
-  brand: '#D92D20',
-  red1: '#FEF3F2', red6: '#D92D20', red8: '#912018',
-  amber1: '#FFFAEB', amber6: '#DC6803', amber8: '#7A3707',
-  green1: '#ECFDF3', green6: '#079455', green8: '#085D3A',
-  blue1: '#EFF8FF', blue6: '#1570EF', blue8: '#194185',
-}}}}
+tailwind.config = { theme: { extend: {
+  colors: {
+    paper: '#F6F7F9', ink: '#101828', sub: '#667085', line: '#E4E7EC',
+    navy: '#0B1526', navy2: '#13233B', navyline: '#1E3050',
+    brand: '#E11D2E', accent: '#2563EB',
+    red1: '#FEF3F2', red6: '#D92D20', red8: '#912018',
+    amber1: '#FFFAEB', amber6: '#DC6803', amber8: '#7A3707',
+    green1: '#ECFDF3', green6: '#079455', green8: '#085D3A',
+    blue1: '#EFF6FF', blue6: '#2563EB', blue8: '#1E3A8A',
+    purple6: '#7A5AF8', teal6: '#0E9384', pink6: '#DD2590',
+  },
+  fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'] },
+}}}
 </script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  body { background: #F6F7F9; }
+  body { background: #F6F7F9; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: #D0D5DD; border-radius: 4px; }
   @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -25,8 +32,10 @@ tailwind.config = { theme: { extend: { colors: {
   #flash-strip { animation: flashIn .3s ease-out; }
   @keyframes flashPulse { 0%,100% { opacity: 1; } 50% { opacity: .75; } }
   #flash-badge { animation: flashPulse 1.2s infinite; }
-  .tab-active { background: #101828; color: #fff; }
-  .chip-active { background: #101828; color: #fff; border-color: #101828; }
+  .navlink { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border-radius: 10px; font-size: 14px; font-weight: 500; color: #94A3B8; transition: background .15s, color .15s; }
+  .navlink:hover { background: #13233B; color: #fff; }
+  .navlink.active { background: #2563EB; color: #fff; }
+  .navlink.active-soft { background: #13233B; color: #fff; box-shadow: inset 3px 0 0 #2563EB; }
 </style>
 </head>
 <body class="text-ink text-[15px] min-h-screen">
@@ -40,102 +49,208 @@ tailwind.config = { theme: { extend: { colors: {
   </div>
 </div>
 
-<header class="sticky top-0 z-20 bg-white border-b border-line">
-  <div class="max-w-6xl mx-auto px-4 py-2.5 flex items-center gap-3 flex-wrap">
-    <div class="flex items-center gap-2 mr-1">
-      <span class="w-2.5 h-2.5 rounded-full bg-brand"></span>
-      <span class="font-semibold tracking-tight">Newsroom</span>
+<div class="flex min-h-screen">
+
+  <!-- Sidebar -->
+  <aside id="sidebar" class="hidden lg:flex flex-col w-[242px] shrink-0 bg-navy text-white fixed inset-y-0 left-0 z-30 px-4 py-5">
+    <div class="flex items-center gap-2.5 px-2 mb-7">
+      <span class="w-3.5 h-3.5 rounded-full bg-brand"></span>
+      <span class="text-[19px] font-bold tracking-tight">Newsroom</span>
+      <button onclick="Nav.toggleSidebar()" class="lg:hidden ml-auto text-white/60 text-[18px]">✕</button>
     </div>
-    <nav class="flex gap-1 overflow-x-auto">
-      <button data-tab="stories" class="tab tab-active px-3.5 py-1.5 rounded-full text-[13px] font-medium whitespace-nowrap">Story desk</button>
-      <button data-tab="xdesk" class="tab px-3.5 py-1.5 rounded-full text-[13px] font-medium text-sub whitespace-nowrap hover:bg-paper">X desk</button>
-      <button data-tab="ops" class="tab px-3.5 py-1.5 rounded-full text-[13px] font-medium text-sub whitespace-nowrap hover:bg-paper">Ops</button>
+
+    <nav class="space-y-1.5">
+      <button class="navlink" data-nav="stories" onclick="Nav.go('stories')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg>
+        Story Desk</button>
+      <button class="navlink" data-nav="xdesk" onclick="Nav.go('xdesk')">
+        <span class="w-[17px] text-center font-bold text-[15px]">𝕏</span>
+        X Desk</button>
+      <button class="navlink" data-nav="ops" onclick="Nav.go('ops')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Ops Desk</button>
     </nav>
-    <span id="updated" class="ml-auto text-[12px] text-sub whitespace-nowrap">connecting…</span>
+
+    <div class="border-t border-navyline my-5"></div>
+
+    <nav class="space-y-1.5">
+      <button class="navlink" data-nav="top" onclick="Nav.go('top')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12l3 3 5-6"/></svg>
+        Top Stories</button>
+      <button class="navlink" data-nav="picks" onclick="Nav.go('picks')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2z"/></svg>
+        My Picks</button>
+      <button class="navlink" data-nav="assignments" onclick="Nav.go('assignments')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13h6M9 17h4"/></svg>
+        Assignments</button>
+      <button class="navlink" data-nav="analytics" onclick="Nav.go('analytics')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 20h18M6 16v-5M11 16V8M16 16v-3M21 16V5"/></svg>
+        Analytics</button>
+      <button class="navlink" data-nav="alerts" onclick="Nav.go('alerts')">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
+        Alerts</button>
+    </nav>
+
+    <div class="mt-auto space-y-3">
+      <div class="flex items-center gap-3 bg-navy2 rounded-xl px-3 py-2.5">
+        <div class="w-9 h-9 rounded-full bg-accent flex items-center justify-center font-semibold text-[14px]">G</div>
+        <div class="min-w-0">
+          <p class="text-[13.5px] font-semibold leading-tight">Gautam</p>
+          <p class="text-[11.5px] text-white/50">Senior Editor</p>
+        </div>
+        <span class="ml-auto text-white/40">▾</span>
+      </div>
+      <div class="bg-navy2 rounded-xl px-3 py-2.5 flex items-center gap-3">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-white/70"><path d="M3 18v-6a9 9 0 0118 0v6"/><path d="M21 19a2 2 0 01-2 2h-1a2 2 0 01-2-2v-3a2 2 0 012-2h3zM3 19a2 2 0 002 2h1a2 2 0 002-2v-3a2 2 0 00-2-2H3z"/></svg>
+        <div>
+          <p class="text-[11.5px] text-white/50">Need help?</p>
+          <p class="text-[13px] font-medium">Editor Support</p>
+        </div>
+      </div>
+    </div>
+  </aside>
+  <div id="sidebar-backdrop" class="hidden fixed inset-0 bg-navy/60 z-20 lg:hidden" onclick="Nav.toggleSidebar()"></div>
+
+  <!-- Main -->
+  <div class="flex-1 min-w-0 lg:ml-[242px]">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-10 bg-white border-b border-line">
+      <div class="px-4 md:px-7 py-3.5 flex items-center gap-3">
+        <button onclick="Nav.toggleSidebar()" class="lg:hidden text-ink text-[20px] leading-none">☰</button>
+        <div class="flex items-baseline gap-3 min-w-0">
+          <h1 id="page-title" class="text-[21px] font-bold tracking-tight whitespace-nowrap">Story Desk</h1>
+          <p id="page-subtitle" class="hidden md:block text-[13.5px] text-sub truncate">Your command center for real-time editorial decisions.</p>
+        </div>
+        <div class="ml-auto flex items-center gap-4">
+          <span class="hidden sm:flex items-center gap-1.5 text-[13px] font-medium"><span id="live-dot" class="w-2 h-2 rounded-full bg-green6"></span> <span id="live-label">Live</span></span>
+          <span id="clock" class="hidden md:block text-[13px] text-sub whitespace-nowrap"></span>
+          <button onclick="Nav.go('alerts')" class="relative text-sub hover:text-ink" title="Alerts">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>
+            <span id="alert-badge" class="hidden absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center"></span>
+          </button>
+          <button onclick="Nav.go('ops')" class="text-sub hover:text-ink" title="Ops Desk">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="px-4 md:px-7 py-5 max-w-[1250px]">
+
+      <!-- Story desk -->
+      <section id="page-stories">
+        <div class="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr_0.8fr] gap-4 mb-6">
+          <div class="bg-white border border-line rounded-2xl p-5">
+            <p class="text-[11.5px] font-semibold tracking-widest text-sub uppercase mb-3">Stories overview</p>
+            <div id="board-mix" class="flex items-center gap-5"></div>
+          </div>
+          <div class="bg-blue1 border border-blue6/15 rounded-2xl p-5 flex flex-col">
+            <div class="flex items-start justify-between">
+              <p class="text-[11.5px] font-semibold tracking-widest text-sub uppercase mb-3">Editor insight</p>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>
+            </div>
+            <p id="insight-text" class="text-[14.5px] font-medium leading-relaxed">Waiting for the first ranking cycle…</p>
+            <button onclick="Nav.go('analytics')" class="mt-auto self-start mt-4 text-[13px] font-medium text-blue6 bg-white rounded-lg px-3.5 py-2 hover:bg-blue-50 border border-blue6/20">View Analytics →</button>
+          </div>
+          <div class="bg-white border border-line rounded-2xl p-5">
+            <p class="text-[11.5px] font-semibold tracking-widest text-sub uppercase mb-3">Quick actions</p>
+            <button onclick="StoryDesk.pickTop()" class="w-full mb-2.5 flex items-center justify-center gap-2 bg-navy text-white text-[13.5px] font-semibold rounded-xl px-4 py-3 hover:bg-navy2">＋ Pick a Story</button>
+            <button onclick="StoryDesk.openTopPack()" class="w-full flex items-center justify-center gap-2 border border-line text-[13.5px] font-semibold rounded-xl px-4 py-3 hover:border-ink">🗂 Story Pack Builder</button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 flex-wrap mb-4">
+          <h2 class="text-[17px] font-bold">All Stories</h2>
+          <span id="story-count" class="min-w-[24px] h-6 px-1.5 rounded-full bg-blue6 text-white text-[12px] font-semibold flex items-center justify-center">0</span>
+          <button id="refresh-stories" class="flex items-center gap-1.5 text-[13px] text-sub hover:text-ink">
+            <span id="refresh-icon">⟳</span> <span id="refresh-label">Refreshed just now</span>
+          </button>
+          <div id="filters" class="flex gap-1.5 flex-wrap"></div>
+          <label class="ml-auto flex items-center gap-1.5 text-[13px] text-sub">Sort by
+            <select id="sort-by" class="border border-line rounded-lg px-2 py-1.5 bg-white text-ink text-[13px] font-medium">
+              <option value="score">Top score</option>
+              <option value="newest">Newest</option>
+            </select>
+          </label>
+        </div>
+        <div id="story-list" class="space-y-3">
+          <p class="text-sub text-[14px] py-8 text-center">Loading stories…</p>
+        </div>
+      </section>
+
+      <!-- X desk -->
+      <section id="page-xdesk" class="hidden">
+        <div class="flex items-center gap-3 flex-wrap mb-4">
+          <button id="x-refresh-btn" class="flex items-center gap-2 bg-navy text-white text-[13px] font-semibold px-4 py-2 rounded-xl hover:bg-navy2">𝕏 Refresh tweets</button>
+          <span id="x-budget" class="text-[12.5px] text-sub"></span>
+          <span id="x-note" class="text-[12.5px] text-sub ml-auto"></span>
+        </div>
+        <div id="top-signals" class="mb-6"></div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div class="bg-white border border-line rounded-2xl p-3">
+            <p class="text-[11px] font-semibold tracking-widest text-green8 uppercase mb-2 px-1">Government &amp; wires</p>
+            <div id="col-A" class="space-y-2 md:max-h-[65vh] md:overflow-y-auto md:pr-1"></div>
+          </div>
+          <div class="bg-white border border-line rounded-2xl p-3">
+            <p class="text-[11px] font-semibold tracking-widest text-amber8 uppercase mb-2 px-1">Rival channels</p>
+            <div id="col-B" class="space-y-2 md:max-h-[65vh] md:overflow-y-auto md:pr-1"></div>
+          </div>
+          <div class="bg-white border border-line rounded-2xl p-3">
+            <p class="text-[11px] font-semibold tracking-widest text-blue8 uppercase mb-2 px-1">Field reporters</p>
+            <div id="col-C" class="space-y-2 md:max-h-[65vh] md:overflow-y-auto md:pr-1"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Ops -->
+      <section id="page-ops" class="hidden">
+        <div id="ops-metrics" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+        <div class="bg-white border border-line rounded-2xl p-5 mb-4">
+          <p class="text-[13px] font-bold mb-3">Controls</p>
+          <div class="flex items-center gap-3 flex-wrap text-[13px]">
+            <label class="flex items-center gap-2">Auto-refresh stories
+              <select id="news-interval" class="border border-line rounded-lg px-2 py-1.5 bg-white">
+                <option value="0">Hourly only</option>
+                <option value="5">Every 5 min</option>
+                <option value="10">Every 10 min</option>
+                <option value="30">Every 30 min</option>
+              </select>
+            </label>
+            <button onclick="Ops.ingestNow(this)" class="px-3.5 py-2 rounded-xl border border-line bg-white hover:border-ink font-medium">⟳ Re-rank now</button>
+            <button onclick="XDesk.refresh()" class="px-3.5 py-2 rounded-xl border border-line bg-white hover:border-ink font-medium">𝕏 Refresh tweets</button>
+            <button onclick="Ops.briefNow(this)" class="px-3.5 py-2 rounded-xl border border-line bg-white hover:border-ink font-medium">✉ Email brief now</button>
+            <a href="/api/briefings/latest" target="_blank" class="px-3.5 py-2 rounded-xl border border-line bg-white hover:border-ink font-medium">View latest brief</a>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-white border border-line rounded-2xl p-5">
+            <p class="text-[13px] font-bold mb-2">Last story refresh</p>
+            <div id="ops-lastcycle" class="text-[13px] text-sub space-y-1"></div>
+          </div>
+          <div class="bg-white border border-line rounded-2xl p-5">
+            <p class="text-[13px] font-bold mb-2">Guardrails — recently filtered posts</p>
+            <div id="ops-discarded" class="text-[13px] text-sub space-y-2"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Analytics -->
+      <section id="page-analytics" class="hidden">
+        <div id="analytics-body" class="space-y-4"></div>
+      </section>
+
+      <!-- Alerts -->
+      <section id="page-alerts" class="hidden">
+        <div id="alerts-body" class="space-y-2.5"></div>
+      </section>
+
+    </main>
   </div>
-</header>
-
-<main class="max-w-6xl mx-auto px-4 py-5">
-
-  <!-- Story desk -->
-  <section id="page-stories">
-    <div class="flex items-center gap-2 flex-wrap mb-4">
-      <h1 class="text-[17px] font-semibold mr-1">Top stories right now</h1>
-      <button id="refresh-stories" class="flex items-center gap-1.5 text-[13px] font-medium px-3.5 py-1.5 rounded-full bg-white border border-line hover:border-ink transition-colors">
-        <span id="refresh-icon">⟳</span> Refresh stories
-      </button>
-      <div id="filters" class="flex gap-1.5 flex-wrap ml-auto"></div>
-    </div>
-    <div id="board-mix" class="hidden md:flex items-center gap-4 bg-white border border-line rounded-xl px-4 py-2.5 mb-4"></div>
-    <div id="story-list" class="space-y-2.5">
-      <p class="text-sub text-[14px] py-8 text-center">Loading stories…</p>
-    </div>
-  </section>
-
-  <!-- X desk -->
-  <section id="page-xdesk" class="hidden">
-    <div class="flex items-center gap-3 flex-wrap mb-4">
-      <h1 class="text-[17px] font-semibold">Live from monitored handles</h1>
-      <button id="x-refresh-btn" class="flex items-center gap-1.5 text-[13px] font-medium px-3.5 py-1.5 rounded-full bg-white border border-line hover:border-ink transition-colors">𝕏 Refresh tweets</button>
-      <span id="x-budget" class="text-[12px] text-sub"></span>
-      <span id="x-note" class="text-[12px] text-sub ml-auto"></span>
-    </div>
-    <div id="top-signals" class="mb-5"></div>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-      <div>
-        <p class="text-[11px] font-semibold tracking-wide text-green8 uppercase mb-2">Government &amp; wires</p>
-        <div id="col-A" class="space-y-2 md:max-h-[70vh] md:overflow-y-auto md:pr-1"></div>
-      </div>
-      <div>
-        <p class="text-[11px] font-semibold tracking-wide text-amber8 uppercase mb-2">Rival channels</p>
-        <div id="col-B" class="space-y-2 md:max-h-[70vh] md:overflow-y-auto md:pr-1"></div>
-      </div>
-      <div>
-        <p class="text-[11px] font-semibold tracking-wide text-blue8 uppercase mb-2">Field reporters</p>
-        <div id="col-C" class="space-y-2 md:max-h-[70vh] md:overflow-y-auto md:pr-1"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Ops -->
-  <section id="page-ops" class="hidden">
-    <h1 class="text-[17px] font-semibold mb-4">Operations</h1>
-    <div id="ops-metrics" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
-
-    <div class="bg-white border border-line rounded-xl p-4 mb-4">
-      <p class="text-[13px] font-semibold mb-3">Controls</p>
-      <div class="flex items-center gap-3 flex-wrap text-[13px]">
-        <label class="flex items-center gap-2">Auto-refresh stories
-          <select id="news-interval" class="border border-line rounded-lg px-2 py-1 bg-white">
-            <option value="0">Hourly only</option>
-            <option value="5">Every 5 min</option>
-            <option value="10">Every 10 min</option>
-            <option value="30">Every 30 min</option>
-          </select>
-        </label>
-        <button onclick="Ops.ingestNow(this)" class="px-3 py-1.5 rounded-full border border-line bg-white hover:border-ink">⟳ Re-rank now</button>
-        <button onclick="XDesk.refresh()" class="px-3 py-1.5 rounded-full border border-line bg-white hover:border-ink">𝕏 Refresh tweets</button>
-        <button onclick="Ops.briefNow(this)" class="px-3 py-1.5 rounded-full border border-line bg-white hover:border-ink">✉ Email brief now</button>
-        <a href="/api/briefings/latest" target="_blank" class="px-3 py-1.5 rounded-full border border-line bg-white hover:border-ink">View latest brief</a>
-      </div>
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="bg-white border border-line rounded-xl p-4">
-        <p class="text-[13px] font-semibold mb-2">Last story refresh</p>
-        <div id="ops-lastcycle" class="text-[13px] text-sub space-y-1"></div>
-      </div>
-      <div class="bg-white border border-line rounded-xl p-4">
-        <p class="text-[13px] font-semibold mb-2">Guardrails — recently filtered posts</p>
-        <div id="ops-discarded" class="text-[13px] text-sub space-y-2"></div>
-      </div>
-    </div>
-  </section>
-</main>
+</div>
 
 <!-- Story pack modal -->
-<div id="pack-overlay" class="hidden fixed inset-0 z-30 bg-ink/40 p-3 md:p-8 overflow-y-auto" onclick="if(event.target===this)StoryDesk.closePack()">
+<div id="pack-overlay" class="hidden fixed inset-0 z-40 bg-navy/50 p-3 md:p-8 overflow-y-auto" onclick="if(event.target===this)StoryDesk.closePack()">
   <div class="max-w-2xl mx-auto bg-white rounded-2xl border border-line p-5 md:p-6 fade-up" id="pack-content"></div>
 </div>
 
@@ -143,6 +258,7 @@ tailwind.config = { theme: { extend: { colors: {
 <script src="/static/js/story_desk.js"></script>
 <script src="/static/js/x_desk.js"></script>
 <script src="/static/js/ops.js"></script>
+<script src="/static/js/views.js"></script>
 <script src="/static/js/stream.js"></script>
 </body>
 </html>
