@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Newsroom Intelligence Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: { extend: { colors: {
+    ink: '#0F1419', panel: '#16202A', edge: '#22303C',
+    breaking: '#E02424', develop: '#D97706', verified: '#059669',
+    accent: '#1D9BF0', dim: '#8B98A5', faint: '#5C6B7A',
+  }}}
+}
+</script>
+<style>
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #22303C; border-radius: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+  .slide-in { animation: slideIn .45s ease-out; }
+  @keyframes pulseGlow { 0%,100% { box-shadow: 0 0 0 0 rgba(224,36,36,.5); } 50% { box-shadow: 0 0 12px 2px rgba(224,36,36,.55); } }
+  .pulse-breaking { animation: pulseGlow 1.8s infinite; }
+  @keyframes flame { 0%,100% { transform: scale(1); } 50% { transform: scale(1.25) rotate(-6deg); } }
+  .flame { display:inline-block; animation: flame 1s infinite; }
+  @keyframes tickerPulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+  .live-dot { animation: tickerPulse 1.6s infinite; }
+</style>
+</head>
+<body class="h-full bg-ink text-gray-200 overflow-hidden text-[13px]">
+<div class="h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="flex items-center gap-4 px-4 py-2 border-b border-edge bg-panel/60 shrink-0">
+    <div class="flex items-center gap-2">
+      <span class="w-2.5 h-2.5 rounded-full bg-breaking live-dot"></span>
+      <h1 class="font-bold tracking-widest text-white text-sm">NEWSROOM INTELLIGENCE</h1>
+    </div>
+    <span id="clock" class="font-mono text-dim"></span>
+    <div id="sys-status" class="text-faint text-xs">connecting…</div>
+    <div class="ml-auto flex items-center gap-2">
+      <button onclick="api('/api/ingest')" class="px-3 py-1 rounded border border-edge hover:border-accent hover:text-accent transition-colors text-xs">⟳ Ingest now</button>
+      <button onclick="api('/api/sim/spike')" class="px-3 py-1 rounded border border-edge hover:border-breaking hover:text-breaking transition-colors text-xs">🚀 Simulate spike</button>
+      <button onclick="api('/api/brief').then(()=>window.open('/api/briefings/latest'))" class="px-3 py-1 rounded border border-edge hover:border-verified hover:text-verified transition-colors text-xs">✉ Brief</button>
+    </div>
+  </header>
+
+  <!-- Section 1: AI News Monitoring Agent (top 50%) -->
+  <section class="h-[46%] flex flex-col border-b-2 border-edge">
+    <div class="flex items-center gap-3 px-4 py-1.5 text-xs text-dim uppercase tracking-wider shrink-0">
+      <span class="text-white font-semibold">AI News Monitoring Agent</span>
+      <span>· evidence-based 100-pt ranking · hourly loop 06:00–21:00</span>
+      <span id="ingest-info" class="ml-auto font-mono"></span>
+    </div>
+    <div id="news-rows" class="flex-1 overflow-y-auto px-3 pb-2 space-y-1.5"></div>
+  </section>
+
+  <!-- Velocity ticker -->
+  <div class="flex items-center gap-3 px-4 py-1 bg-panel/80 border-b border-edge shrink-0 overflow-hidden">
+    <span class="text-[10px] font-bold tracking-widest text-accent shrink-0">X CONVERSATION BROKER</span>
+    <div id="ticker" class="flex gap-6 text-xs text-dim whitespace-nowrap overflow-x-auto">
+      <span class="text-faint">monitoring term velocity…</span>
+    </div>
+  </div>
+
+  <!-- Section 2: X Monitoring Desk (bottom 50%) -->
+  <section class="flex-1 min-h-0 flex flex-col">
+    <div class="flex items-center gap-3 px-4 py-1.5 text-xs text-dim uppercase tracking-wider shrink-0">
+      <span class="text-white font-semibold">X Monitoring Desk</span>
+      <span id="x-layer" class="font-mono">layer: —</span>
+      <span class="ml-auto" id="x-stats"></span>
+    </div>
+    <div class="flex-1 min-h-0 grid grid-cols-3 gap-px bg-edge px-3 pb-2">
+      <div class="flex flex-col min-h-0 bg-ink">
+        <div class="px-2 py-1 text-[10px] font-bold tracking-widest text-verified shrink-0">A · INSTITUTIONAL &amp; GOVERNMENT</div>
+        <div id="col-A" class="flex-1 overflow-y-auto space-y-1 pr-1"></div>
+      </div>
+      <div class="flex flex-col min-h-0 bg-ink">
+        <div class="px-2 py-1 text-[10px] font-bold tracking-widest text-develop shrink-0">B · RIVAL / COMPETITOR CHANNELS</div>
+        <div id="col-B" class="flex-1 overflow-y-auto space-y-1 pr-1"></div>
+      </div>
+      <div class="flex flex-col min-h-0 bg-ink">
+        <div class="px-2 py-1 text-[10px] font-bold tracking-widest text-accent shrink-0">C · FIELD REPORTERS &amp; RESPONDERS</div>
+        <div id="col-C" class="flex-1 overflow-y-auto space-y-1 pr-1"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="/static/js/news_panel.js"></script>
+<script src="/static/js/x_panel.js"></script>
+<script src="/static/js/ticker.js"></script>
+<script src="/static/js/stream.js"></script>
+</body>
+</html>

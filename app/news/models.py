@@ -1,0 +1,42 @@
+from dataclasses import dataclass, field
+
+
+THEMATIC_FLAGS = [
+    "political",
+    "celebrity",
+    "violence",
+    "economy",
+    "health",
+    "disaster",
+    "breaking",
+    "developing",
+]
+
+MEDIA_INDICATORS = [
+    "live_feed",
+    "drone_footage",
+    "police_action",
+    "crowds",
+    "explosions",
+    "floods",
+    "fires",
+]
+
+
+@dataclass
+class RawArticle:
+    title: str
+    url: str
+    publisher: str
+    published_at: str  # ISO timestamp
+    summary: str = ""
+
+
+@dataclass
+class EnrichedStory:
+    raw: RawArticle
+    location: str = "India"
+    category: str = "National"
+    flags: dict = field(default_factory=dict)      # thematic booleans
+    media: dict = field(default_factory=dict)      # rich-media indicators + image count
+    sources: list = field(default_factory=list)    # corroborating publishers
