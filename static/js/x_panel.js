@@ -15,9 +15,15 @@ const XPanel = (() => {
     return `<span class="font-mono ${color}">T${score}</span>`;
   }
 
+  // Shows when the X post was actually made (not when we fetched it):
+  // time-of-day for today's posts, date + time for older ones.
   function timeStr(iso) {
     try {
-      return new Date(iso).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      const d = new Date(iso);
+      const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const today = new Date().toDateString() === d.toDateString();
+      return today ? `posted ${time}`
+        : `posted ${d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ${time}`;
     } catch { return ''; }
   }
 

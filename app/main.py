@@ -132,8 +132,26 @@ async def manual_brief():
     )
 
 
+@app.post("/api/x/refresh")
+async def x_refresh():
+    """Manual X-desk refresh — in twtapi mode this spends ~3 API calls."""
+    return await asyncio.get_running_loop().run_in_executor(
+        None, pipeline.manual_refresh
+    )
+
+
+@app.get("/api/x/status")
+def x_status():
+    return {"provider": config.X_PROVIDER, "layer": pipeline.active_layer,
+            "manual_only": pipeline.manual_only,
+            "key_configured": bool(config.TWT_API_KEY),
+            **pipeline.twtapi.last_status}
+
+
 @app.post("/api/sim/spike")
 async def sim_spike():
+    if pipeline.manual_only:
+        raise HTTPException(409, "Spike demo only available with X_PROVIDER=sim")
     with db.connect() as con:
         row = con.execute(
             "SELECT id, title FROM stories WHERE active=1 ORDER BY score DESC LIMIT 1"

@@ -36,8 +36,16 @@ NEWS_RSS_URL = os.getenv(
 )
 STORIES_PER_CYCLE = _int("STORIES_PER_CYCLE", 5)
 
-X_PROVIDER = os.getenv("X_PROVIDER", "sim")
+X_PROVIDER = os.getenv("X_PROVIDER", "twtapi")   # twtapi = real tweets, sim = demo feed
 SIM_TWEETS_PER_MIN = _int("SIM_TWEETS_PER_MIN", 12)
+
+# TwtAPI (api.twtapi.com) — real tweet text, manual refresh only to respect
+# the small monthly call budget. One Search call covers ~20 handles via
+# "from:a OR from:b" chains; a refresh spends one call per column (3 total).
+TWT_API_KEY = os.getenv("TWT_API_KEY", "")
+TWT_API_BASE = os.getenv("TWT_API_BASE", "https://api.twtapi.com/api/v1/twitter")
+TWT_STATUS_URL = os.getenv("TWT_STATUS_URL", "https://api.twtapi.com/myapi/status")
+X_HANDLES_PER_COLUMN = _int("X_HANDLES_PER_COLUMN", 20)  # top-trust handles searched per column
 
 # Keyword-driven fresh-story discovery (mirrors the manual editor workflow:
 # keyword -> Google News -> "Past hour" filter)

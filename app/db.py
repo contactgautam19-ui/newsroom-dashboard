@@ -104,6 +104,9 @@ MIGRATIONS = [
     # Trend Momentum points came from discovery vs the broker's live boost
     "ALTER TABLE stories ADD COLUMN discovered_via TEXT",
     "ALTER TABLE stories ADD COLUMN trend_base INTEGER NOT NULL DEFAULT 0",
+    # real-tweet provenance (2026-07): rows without it predate the TwtAPI
+    # integration and are simulated content
+    "ALTER TABLE tweets ADD COLUMN provider TEXT NOT NULL DEFAULT 'simulated'",
 ]
 
 

@@ -3,7 +3,7 @@
 A single-screen, dark-theme newsroom dashboard combining two live systems:
 
 - **Top half — AI News Monitoring Agent**: every cycle (hourly 06:00–21:00, or faster via AUTO refresh) it (1) collects hot keywords from the monitored X accounts and Google Trends India, (2) runs each through a **past-hour Google News search** (`when:1h` — the automated version of the editor's manual keyword → News → Past hour workflow), (3) polls the curated 50-source RSS matrix, then clusters everything cross-outlet, drops candidates older than `FRESHNESS_HOURS` (3h), retires board stories older than `RETIRE_HOURS` (12h), and ranks the survivors on the evidence-based 100-point framework with editorial guardrails (two-source rule, <70% confidence review flag, repetitive decay). Stories found via a trending keyword carry a 🔍 chip and earn Search Trend Momentum points with the keyword cited as evidence.
-- **Bottom half — X Monitoring Desk**: three independently scrolling columns (A: Institutional & Government, B: Rival/Competitor Channels, C: Field Reporters & Responders) fed from the 242-handle India X master database, filtered by editorial guardrails.
+- **Bottom half — X Monitoring Desk**: three independently scrolling columns (A: Institutional & Government, B: Rival/Competitor Channels, C: Field Reporters & Responders) showing **real tweets** (exact text, actual post time) from the 242-handle India X master database via TwtAPI, filtered by editorial guardrails. Refresh is **manual-only** (`𝕏 Refresh tweets` button) to respect the monthly API budget: each refresh spends one Search call per column (~3 total) covering the top-trust handles, and the header shows the remaining monthly calls after every refresh. If the API is unavailable the columns stay quiet — the desk never shows fabricated content. (`X_PROVIDER=sim` in `.env` switches back to the clearly-labelled simulated demo feed, which is auto-purged whenever real mode is active.)
 - **X Conversation Broker**: every 60s aggregates term volume across scraped tweets; a >150% spike in a rolling 5-minute window matching an active headline fires a *Viral Acceleration Event*, injecting a +1..+10 point offset into that story's Search Trend Momentum score and rendering an inline `X TREND ACCELERATION` sub-row. Surges past 5,000 posts/hour override low-confidence holds and elevate to a *High-Demand Airtime Recommendation*.
 
 Built from the specification documents in `AI Newsroom 3` (Master Prompt, Newsroom Dashboard MVP PRD, X Intelligence Dashboard spec, X Monitoring Guardrails, India X master database).
@@ -24,6 +24,12 @@ Hourly HTML briefs go to `BRIEF_RECIPIENT` (default `gautam.news9@gmail.com`) at
 2. In `.env`: set `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `EMAIL_ENABLED=true`.
 
 Every brief is also saved to `briefings_out/` and viewable at `/api/briefings/latest` regardless of email settings.
+
+### TwtAPI (real tweets)
+
+1. Get your API key from your [TwtAPI dashboard](https://www.twtapi.com).
+2. In `.env`: set `TWT_API_KEY=<your key>` and restart the server.
+3. Click `𝕏 Refresh tweets` whenever you want the latest posts. Budgeting: ~3 calls per refresh → a 300-call month allows ~100 refreshes; `X_HANDLES_PER_COLUMN` (default 20) controls how many top-trust handles each column's search covers.
 
 ### Refreshing the handle database
 

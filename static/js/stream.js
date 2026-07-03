@@ -25,6 +25,10 @@
       Ticker.status(JSON.parse(e.data));
     });
 
+    source.addEventListener('x_refresh', e => {
+      XRefresh.budget(JSON.parse(e.data));
+    });
+
     source.onopen = () => {
       const sys = document.getElementById('sys-status');
       if (sys) sys.textContent = 'live';

@@ -54,7 +54,10 @@ def briefing_job() -> None:
 
 def start() -> None:
     scheduler.add_job(hourly_ingest_job, "cron", minute=0, id="hourly_ingest")
-    scheduler.add_job(x_poll_job, "interval", seconds=5, id="x_poll")
+    if not pipeline.manual_only:
+        # simulated feed only — real providers are refreshed manually so the
+        # monthly API budget is never spent by a background timer
+        scheduler.add_job(x_poll_job, "interval", seconds=5, id="x_poll")
     scheduler.add_job(broker_job, "interval",
                       seconds=config.BROKER_TICK_SECONDS, id="broker_tick")
     scheduler.add_job(briefing_job, "cron", minute=58, id="hourly_brief")

@@ -14,23 +14,35 @@ from app.x import guardrails
 from app.x.models import Tweet
 from app.x.provider import ProviderUnavailable, XProvider
 from app.x.sim_provider import SimulatedProvider
-from app.x.stubs import NitterProvider, PlaywrightProvider, TwscrapeProvider
+from app.x.twtapi_provider import TwtAPIProvider
 
 
 class XPipeline:
     def __init__(self):
         self.sim = SimulatedProvider(config.SIM_TWEETS_PER_MIN)
+        self.twtapi = TwtAPIProvider()
         if config.X_PROVIDER == "sim":
             self.layers: list[XProvider] = [self.sim]
         else:
-            self.layers = [TwscrapeProvider(), NitterProvider(),
-                           PlaywrightProvider(), self.sim]
+            # real tweets only — never silently fall back to simulated content
+            self.layers = [self.twtapi]
         self.active_layer = self.layers[0].name
+        self.manual_only = config.X_PROVIDER != "sim"  # protect the call budget
+        self.last_error: str | None = None
         self._seen_ids: set[str] = set()
         self._handles: list[dict] = []
 
     def load_handles(self) -> None:
         with db.connect() as con:
+            if self.manual_only:
+                # accuracy rule: simulated tweets never share a board with
+                # real ones — purge them the moment a real provider is active
+                purged = con.execute(
+                    "DELETE FROM tweets WHERE provider = 'simulated'"
+                ).rowcount
+                if purged:
+                    events.publish("system_status",
+                                   {"purged_simulated_tweets": purged})
             rows = con.execute("SELECT * FROM handles").fetchall()
             self._handles = db.rows_to_dicts(rows)
             for r in con.execute("SELECT id FROM tweets ORDER BY rowid DESC LIMIT 5000"):
@@ -45,6 +57,7 @@ class XPipeline:
                 return []
 
         tweets: list[Tweet] = []
+        self.last_error = None
         for layer in self.layers:
             try:
                 tweets = layer.fetch_new_tweets(self._handles)
@@ -52,8 +65,12 @@ class XPipeline:
                     self.active_layer = layer.name
                     events.publish("system_status", {"x_layer": layer.name})
                 break
-            except ProviderUnavailable:
+            except ProviderUnavailable as exc:
+                self.last_error = str(exc)
                 continue
+        if self.last_error and not tweets:
+            events.publish("system_status",
+                           {"x_layer": "unavailable", "x_error": self.last_error})
 
         fresh = [t for t in tweets if t.id not in self._seen_ids]
         self._seen_ids.update(t.id for t in fresh)
@@ -67,12 +84,12 @@ class XPipeline:
                 con.execute(
                     """INSERT OR IGNORE INTO tweets (id, handle, display_name, text,
                        created_at, stream_column, trust_score, news_signal,
-                       discarded, discard_reason, terms)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                       discarded, discard_reason, terms, provider)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (t.id, t.handle, t.display_name, t.text, t.created_at,
                      t.stream_column, t.trust_score, verdict["news_signal"],
                      int(not verdict["keep"]), verdict["reason"],
-                     json.dumps(t.terms)),
+                     json.dumps(t.terms), self.active_layer),
                 )
                 if verdict["keep"]:
                     kept.append((t, verdict["news_signal"]))
@@ -85,6 +102,21 @@ class XPipeline:
                 "news_signal": signal, "terms": t.terms,
             })
         return [t for t, _ in kept]
+
+    def manual_refresh(self) -> dict:
+        """User-triggered refresh (the only way tweets arrive in twtapi mode,
+        so the monthly call budget is spent deliberately, never by a timer)."""
+        kept = self.poll()
+        status = self.twtapi.account_status() if self.manual_only else {}
+        result = {
+            "ok": self.last_error is None,
+            "layer": self.active_layer,
+            "tweets_new": len(kept),
+            "error": self.last_error,
+            **{k: v for k, v in status.items() if v is not None},
+        }
+        events.publish("x_refresh", result)
+        return result
 
 
 def seed_handles_table() -> int:

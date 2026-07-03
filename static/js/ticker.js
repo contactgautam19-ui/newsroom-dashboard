@@ -38,7 +38,11 @@ const Ticker = (() => {
   function status(data) {
     if (data.x_layer) {
       const el = document.getElementById('x-layer');
-      if (el) el.textContent = `layer: ${data.x_layer}`;
+      if (el) el.textContent = data.x_error
+        ? `layer: ${data.x_layer} — ${data.x_error}`.slice(0, 90)
+        : `layer: ${data.x_layer}`;
+      const spike = document.getElementById('spike-btn');
+      if (spike) spike.classList.toggle('hidden', data.x_layer !== 'simulated');
     }
     const sys = document.getElementById('sys-status');
     if (sys && data.state) {
@@ -120,3 +124,46 @@ async function api(path) {
   const res = await fetch(path, { method: 'POST' });
   return res.json();
 }
+
+// Manual X-desk refresh — deliberate spend of the monthly TwtAPI budget.
+const XRefresh = (() => {
+  function budget(r) {
+    const el = document.getElementById('x-budget');
+    if (el && r && r.monthly_remaining != null) {
+      el.textContent = `· ${r.monthly_remaining} API calls left this month`;
+    }
+  }
+
+  async function run() {
+    const btn = document.getElementById('x-refresh-btn');
+    const orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '𝕏 fetching…';
+    try {
+      const r = await api('/api/x/refresh');
+      budget(r);
+      btn.textContent = r.ok
+        ? `𝕏 +${r.tweets_new} tweets`
+        : '𝕏 refresh failed';
+      if (!r.ok && r.error) {
+        const el = document.getElementById('x-layer');
+        if (el) el.textContent = `layer: ${r.layer} — ${r.error}`.slice(0, 90);
+      }
+    } catch {
+      btn.textContent = '𝕏 refresh failed';
+    } finally {
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2500);
+    }
+  }
+
+  // show budget + provider state on load without spending any calls
+  fetch('/api/x/status').then(r => r.json()).then(s => {
+    budget(s);
+    if (!s.key_configured && s.manual_only) {
+      const el = document.getElementById('x-layer');
+      if (el) el.textContent = 'layer: twtapi — API key missing (set TWT_API_KEY in .env)';
+    }
+  }).catch(() => {});
+
+  return { run, budget };
+})();
