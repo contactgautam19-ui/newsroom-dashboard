@@ -84,12 +84,12 @@ class XPipeline:
                 con.execute(
                     """INSERT OR IGNORE INTO tweets (id, handle, display_name, text,
                        created_at, stream_column, trust_score, news_signal,
-                       discarded, discard_reason, terms, provider)
-                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       discarded, discard_reason, terms, provider, avatar_url)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     (t.id, t.handle, t.display_name, t.text, t.created_at,
                      t.stream_column, t.trust_score, verdict["news_signal"],
                      int(not verdict["keep"]), verdict["reason"],
-                     json.dumps(t.terms), self.active_layer),
+                     json.dumps(t.terms), self.active_layer, t.avatar_url),
                 )
                 if verdict["keep"]:
                     kept.append((t, verdict["news_signal"]))

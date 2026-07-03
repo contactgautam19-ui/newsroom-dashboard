@@ -11,3 +11,4 @@ class Tweet:
     stream_column: str = "C"   # A | B | C
     trust_score: int = 60
     terms: list = field(default_factory=list)  # extracted hashtags/entities
+    avatar_url: str = ""                        # poster profile image

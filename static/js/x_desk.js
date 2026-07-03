@@ -59,27 +59,39 @@ const XDesk = (() => {
   }
   document.getElementById('x-refresh-btn').addEventListener('click', refresh);
 
+  const AVATAR_COLORS = ['#2563EB', '#079455', '#DC6803', '#7A5AF8', '#DD2590'];
+
+  function avatarHtml(s, i) {
+    if (s.avatar_url) {
+      return `<img src="${esc(s.avatar_url)}" alt="" class="w-10 h-10 rounded-full object-cover shrink-0 border border-line"
+        onerror="this.outerHTML='${avatarFallback(s, i).replace(/'/g, '&#39;')}'">`;
+    }
+    return avatarFallback(s, i);
+  }
+
+  function avatarFallback(s, i) {
+    const letter = (s.display_name || s.handle || '?').replace('@', '').charAt(0).toUpperCase();
+    return `<div class="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white text-[15px] font-bold" style="background:${AVATAR_COLORS[i % AVATAR_COLORS.length]}">${letter}</div>`;
+  }
+
+  // Sharp signal card: who posted + why it ranks. Nothing else.
   function signalCard(s, rank) {
-    const jump = s.linked_story
-      ? `<button onclick="Nav.go('stories');setTimeout(()=>{const c=document.querySelector('article[data-id=\\'${s.linked_story.story_id}\\']');if(c){c.scrollIntoView({behavior:'smooth',block:'center'});c.style.outline='2px solid #2563EB';setTimeout(()=>c.style.outline='',2500);}},150)" class="text-[11.5px] text-blue6 hover:underline text-left">↗ ${esc(s.linked_story.story_title.slice(0, 60))}…</button>`
-      : '';
+    const chips = (s.reasons || []).map(r => {
+      if (r === 'matches a board story' && s.linked_story) {
+        return `<button onclick="Nav.go('stories');setTimeout(()=>{const c=document.querySelector('article[data-id=\\'${s.linked_story.story_id}\\']');if(c){c.scrollIntoView({behavior:'smooth',block:'center'});c.style.outline='2px solid #2563EB';setTimeout(()=>c.style.outline='',2500);}},150)"
+          class="px-2 py-1 rounded-lg bg-blue1 text-blue8 text-[11.5px] font-medium hover:bg-blue6 hover:text-white transition-colors">↗ matches a board story</button>`;
+      }
+      return `<span class="px-2 py-1 rounded-lg bg-paper text-sub text-[11.5px] font-medium">${esc(r)}</span>`;
+    }).join('');
     return `
-      <div class="fade-up bg-white border border-line rounded-2xl p-3.5 flex gap-3" style="border-left:4px solid #2563EB">
-        <div class="text-center shrink-0">
-          <div class="w-8 h-8 rounded-full bg-blue1 text-blue8 flex items-center justify-center text-[13px] font-semibold">${rank}</div>
-          <div class="text-[10px] text-sub mt-0.5 font-mono">${s.score}</div>
+      <div class="fade-up bg-white border border-line rounded-2xl px-4 py-3 flex items-center gap-3.5" style="border-left:4px solid #2563EB">
+        <span class="text-[13px] font-bold text-sub w-3 shrink-0">${rank}</span>
+        ${avatarHtml(s, rank - 1)}
+        <div class="min-w-0 shrink-0">
+          <p class="text-[13.5px] font-bold leading-tight">${esc(s.display_name || s.handle)}</p>
+          <p class="text-[12px] text-sub">${esc(s.handle)}</p>
         </div>
-        <div class="min-w-0 flex-1">
-          <p class="text-[12.5px]">
-            <span class="font-semibold">${esc(s.display_name || s.handle)}</span>
-            <span class="text-sub">${esc(s.handle)} · ${postedLabel(s.created_at)} · <span class="font-mono ${trustColor(s.trust_score)}">T${s.trust_score}</span></span>
-          </p>
-          <p class="text-[13px] leading-snug mt-0.5">${esc(s.text)}</p>
-          <div class="flex items-center gap-1.5 flex-wrap mt-1.5">
-            ${(s.reasons || []).map(r => `<span class="px-1.5 py-0.5 rounded bg-paper text-sub text-[10.5px]">${esc(r)}</span>`).join('')}
-          </div>
-          ${jump}
-        </div>
+        <div class="flex items-center gap-1.5 flex-wrap justify-end ml-auto">${chips}</div>
       </div>`;
   }
 
@@ -89,7 +101,7 @@ const XDesk = (() => {
     try {
       const signals = await (await fetch('/api/x/top-signals')).json();
       el.innerHTML = signals.length ? `
-        <p class="text-[11px] font-semibold tracking-wide text-blue8 uppercase mb-2">Top 5 signals — needs editorial attention</p>
+        <p class="text-[11px] font-semibold tracking-widest text-blue8 uppercase mb-2">Top 5 signals — needs editorial attention</p>
         <div class="space-y-2">${signals.map((s, i) => signalCard(s, i + 1)).join('')}</div>` : '';
     } catch { /* non-fatal */ }
   }

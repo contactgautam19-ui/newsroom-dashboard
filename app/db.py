@@ -111,6 +111,8 @@ MIGRATIONS = [
     "ALTER TABLE stories ADD COLUMN picked INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE stories ADD COLUMN picked_at TEXT",
     "ALTER TABLE stories ADD COLUMN last_aged_at TEXT",
+    # poster profile image for the Top 5 signals cards
+    "ALTER TABLE tweets ADD COLUMN avatar_url TEXT",
 ]
 
 

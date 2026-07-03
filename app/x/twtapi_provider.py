@@ -86,7 +86,7 @@ class TwtAPIProvider(XProvider):
     def _extract_tweets(self, payload, handle_map: dict) -> list[Tweet]:
         tweets: list[Tweet] = []
 
-        def add(tid, text, created, username):
+        def add(tid, text, created, username, avatar=""):
             if not tid or not text or not username:
                 return
             rec = handle_map.get(username.lower().lstrip("@"))
@@ -101,6 +101,7 @@ class TwtAPIProvider(XProvider):
                 stream_column=rec["stream_column"],
                 trust_score=rec["trust_score"],
                 terms=extract_terms(str(text)),
+                avatar_url=avatar or "",
             ))
 
         # TwtAPI's own normalization (verified live 2026-07-03): X GraphQL
@@ -116,10 +117,12 @@ class TwtAPIProvider(XProvider):
                         .get("result", {}))
                 username = (user.get("core", {}).get("screen_name")
                             or user.get("legacy", {}).get("screen_name") or "")
+                avatar = (user.get("avatar", {}).get("image_url")
+                          or user.get("legacy", {}).get("profile_image_url_https") or "")
                 add(res.get("rest_id") or entry.get("rest_id"),
                     legacy.get("full_text"),
                     legacy.get("created_at"),
-                    username)
+                    username, avatar)
             return tweets
 
         body = payload.get("data", payload) if isinstance(payload, dict) else payload

@@ -99,7 +99,8 @@ def top_signals() -> list[dict]:
         scored.append({
             "score": score, "reasons": reasons, "linked_story": linked,
             "handle": t["handle"], "display_name": t["display_name"],
-            "text": t["text"], "created_at": t["created_at"],
+            "avatar_url": t.get("avatar_url") or "",
+            "created_at": t["created_at"],
             "trust_score": trust, "stream_column": t["stream_column"],
         })
 
