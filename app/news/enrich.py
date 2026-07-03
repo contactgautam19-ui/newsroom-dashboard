@@ -108,7 +108,7 @@ def enrich(raw: RawArticle) -> EnrichedStory:
     # Google News RSS gives no image payload; count inline media references
     media["image_count"] = len(re.findall(r"<img\b", raw.summary or ""))
 
-    category = "National"
+    category = raw.category_hint or "National"
     for cat, terms in CATEGORY_RULES:
         if find_matches(text, terms):
             category = cat

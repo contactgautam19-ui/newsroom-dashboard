@@ -127,24 +127,44 @@ def _persist_story(con, story, score, confidence, verdict, now_iso) -> tuple[int
 
 
 def run_ingest_cycle(manual: bool = False) -> dict:
-    """One full ingest -> enrich -> score -> guardrail -> persist cycle."""
+    """One full ingest -> enrich -> score -> guardrail -> persist cycle.
+
+    Primary source: the curated 50-source ingestion matrix (all active RSS
+    feeds polled concurrently, headlines clustered across outlets). Falls back
+    to Google News top stories if the matrix file is missing.
+    """
+    from app.news import sources as sources_mod
+
     now_iso = datetime.now(timezone.utc).isoformat()
     events.publish("system_status", {"state": "ingesting", "at": now_iso})
 
+    feed_stats = {}
     try:
-        articles = fetch_top_articles(config.STORIES_PER_CYCLE)
+        if sources_mod.load_sources():
+            candidates, feed_stats = sources_mod.fetch_matrix_articles()
+        else:
+            candidates = fetch_top_articles(config.STORIES_PER_CYCLE)
     except Exception as exc:
         events.publish("system_status", {"state": "ingest_error", "error": str(exc)})
         return {"ok": False, "error": str(exc), "stories": 0, "max_score": 0}
+
+    # Score every clustered candidate, keep the strongest for the rundown
+    scored = []
+    for raw in candidates:
+        story = enrich_mod.enrich(raw)
+        story.sources = sorted(
+            set(story.sources) | set(raw.corroborators)
+            | set(_related_publishers(raw.summary))
+        )
+        scored.append((scoring.score_story(story), story))
+    scored.sort(key=lambda pair: pair[0]["total"], reverse=True)
+    articles = scored[: config.STORIES_PER_CYCLE]
 
     max_score = 0
     new_count = 0
     seen_ids = []
     with db.connect() as con:
-        for raw in articles:
-            story = enrich_mod.enrich(raw)
-            story.sources = sorted(set(story.sources) | set(_related_publishers(raw.summary)))
-            score = scoring.score_story(story)
+        for score, story in articles:
             confidence = scoring.compute_confidence(story, score)
             verdict = guardrails.apply_guardrails(story, score, confidence)
             story_id, is_new = _persist_story(con, story, score, confidence, verdict, now_iso)
@@ -166,9 +186,10 @@ def run_ingest_cycle(manual: bool = False) -> dict:
     publish_rundown()
     events.publish("system_status", {
         "state": "idle", "last_ingest": now_iso, "new_stories": new_count,
-        "max_score": max_score, "manual": manual,
+        "max_score": max_score, "manual": manual, **feed_stats,
     })
-    return {"ok": True, "stories": len(articles), "new": new_count, "max_score": max_score}
+    return {"ok": True, "stories": len(articles), "new": new_count,
+            "max_score": max_score, **feed_stats}
 
 
 def get_rundown(limit: int = 12) -> list[dict]:

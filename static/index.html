@@ -40,6 +40,7 @@ tailwind.config = {
     <span id="clock" class="font-mono text-dim"></span>
     <div id="sys-status" class="text-faint text-xs">connecting…</div>
     <div class="ml-auto flex items-center gap-2">
+      <button id="auto-refresh" onclick="AutoRefresh.cycle()" title="Auto-refresh: re-run the source ingest on a timer" class="px-3 py-1 rounded border border-edge hover:border-accent transition-colors text-xs font-mono">AUTO ⟳ OFF</button>
       <button onclick="api('/api/ingest')" class="px-3 py-1 rounded border border-edge hover:border-accent hover:text-accent transition-colors text-xs">⟳ Ingest now</button>
       <button onclick="api('/api/sim/spike')" class="px-3 py-1 rounded border border-edge hover:border-breaking hover:text-breaking transition-colors text-xs">🚀 Simulate spike</button>
       <button onclick="api('/api/brief').then(()=>window.open('/api/briefings/latest'))" class="px-3 py-1 rounded border border-edge hover:border-verified hover:text-verified transition-colors text-xs">✉ Brief</button>

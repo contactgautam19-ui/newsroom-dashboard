@@ -30,6 +30,9 @@ class RawArticle:
     publisher: str
     published_at: str  # ISO timestamp
     summary: str = ""
+    category_hint: str = ""             # from the source matrix Focus column
+    source_rank: int = 99               # matrix rank (1 = highest priority)
+    corroborators: list = field(default_factory=list)  # outlets in this cluster
 
 
 @dataclass

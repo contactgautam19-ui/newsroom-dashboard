@@ -88,6 +88,12 @@ def tweets(limit: int = 40):
     return db.rows_to_dicts(rows)
 
 
+@app.get("/api/sources")
+def news_sources():
+    from app.news.sources import load_sources
+    return load_sources(active_only=False)
+
+
 @app.get("/api/velocity")
 def velocity(limit: int = 20):
     with db.connect() as con:
