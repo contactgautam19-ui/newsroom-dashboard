@@ -103,6 +103,25 @@ class TwtAPIProvider(XProvider):
                 terms=extract_terms(str(text)),
             ))
 
+        # TwtAPI's own normalization (verified live 2026-07-03): X GraphQL
+        # tweets under _normalized.tweets[].result with legacy fields
+        if isinstance(payload, dict) and isinstance(
+                payload.get("_normalized", {}).get("tweets"), list):
+            for entry in payload["_normalized"]["tweets"]:
+                res = (entry or {}).get("result", {})
+                if res.get("__typename") == "TweetWithVisibilityResults":
+                    res = res.get("tweet", {})
+                legacy = res.get("legacy", {})
+                user = (res.get("core", {}).get("user_results", {})
+                        .get("result", {}))
+                username = (user.get("core", {}).get("screen_name")
+                            or user.get("legacy", {}).get("screen_name") or "")
+                add(res.get("rest_id") or entry.get("rest_id"),
+                    legacy.get("full_text"),
+                    legacy.get("created_at"),
+                    username)
+            return tweets
+
         body = payload.get("data", payload) if isinstance(payload, dict) else payload
 
         # X API v2 layout: {data: [...], includes: {users: [...]}}
