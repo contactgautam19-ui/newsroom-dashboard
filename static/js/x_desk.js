@@ -74,24 +74,27 @@ const XDesk = (() => {
     return `<div class="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-white text-[15px] font-bold" style="background:${AVATAR_COLORS[i % AVATAR_COLORS.length]}">${letter}</div>`;
   }
 
-  // Sharp signal card: who posted + why it ranks. Nothing else.
+  // Sharp signal card: who posted, what the post says, why it ranks.
   function signalCard(s, rank) {
     const chips = (s.reasons || []).map(r => {
       if (r === 'matches a board story' && s.linked_story) {
         return `<button onclick="Nav.go('stories');setTimeout(()=>{const c=document.querySelector('article[data-id=\\'${s.linked_story.story_id}\\']');if(c){c.scrollIntoView({behavior:'smooth',block:'center'});c.style.outline='2px solid #2563EB';setTimeout(()=>c.style.outline='',2500);}},150)"
-          class="px-2 py-1 rounded-lg bg-blue1 text-blue8 text-[11.5px] font-medium hover:bg-blue6 hover:text-white transition-colors">↗ matches a board story</button>`;
+          class="px-2 py-1 rounded-lg bg-blue1 text-blue8 text-[11.5px] font-medium hover:bg-blue6 hover:text-white transition-colors" title="${esc(s.linked_story.story_title)}">↗ matches a board story</button>`;
       }
       return `<span class="px-2 py-1 rounded-lg bg-paper text-sub text-[11.5px] font-medium">${esc(r)}</span>`;
     }).join('');
     return `
-      <div class="fade-up bg-white border border-line rounded-2xl px-4 py-3 flex items-center gap-3.5" style="border-left:4px solid #2563EB">
-        <span class="text-[13px] font-bold text-sub w-3 shrink-0">${rank}</span>
+      <div class="fade-up bg-white border border-line rounded-2xl px-4 py-3 flex items-start gap-3.5" style="border-left:4px solid #2563EB">
+        <span class="text-[13px] font-bold text-sub w-3 shrink-0 pt-2.5">${rank}</span>
         ${avatarHtml(s, rank - 1)}
-        <div class="min-w-0 shrink-0">
-          <p class="text-[13.5px] font-bold leading-tight">${esc(s.display_name || s.handle)}</p>
-          <p class="text-[12px] text-sub">${esc(s.handle)}</p>
+        <div class="min-w-0 flex-1">
+          <p class="text-[13.5px] leading-tight">
+            <span class="font-bold">${esc(s.display_name || s.handle)}</span>
+            <span class="text-sub text-[12px] font-normal">${esc(s.handle)}</span>
+          </p>
+          <p class="text-[13px] leading-snug mt-1" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(s.summary || '')}</p>
+          <div class="flex items-center gap-1.5 flex-wrap mt-2">${chips}</div>
         </div>
-        <div class="flex items-center gap-1.5 flex-wrap justify-end ml-auto">${chips}</div>
       </div>`;
   }
 

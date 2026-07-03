@@ -6,6 +6,7 @@ board story), live momentum (trending terms), and recency. Follower counts
 play no part (rule 12).
 """
 
+import html
 import json
 import re
 from datetime import datetime, timedelta, timezone
@@ -28,6 +29,26 @@ SIGNAL_WEIGHTS = {
 }
 
 _word_re = re.compile(r"[^a-z0-9 ]")
+_url_re = re.compile(r"https?://\S+")
+_report_re = re.compile(r"\(?\s*report(ed)? by:?\s*@\w+\s*\)?", re.I)
+_cta_re = re.compile(r"\b(read|watch|full story|details|more here)\s*[:|]\s*", re.I)
+
+
+def _summarize(text: str, limit: int = 180) -> str:
+    """Readable gist of the post: exact wording minus links, credits and
+    formatting noise (accuracy rule — we condense, never paraphrase)."""
+    clean = html.unescape(text)
+    clean = _url_re.sub("", clean)
+    clean = _report_re.sub("", clean)
+    clean = _cta_re.sub("", clean)
+    clean = clean.replace("#BREAKING", "").replace("#WATCH", "")
+    clean = re.sub(r"\(\s*\)", "", clean)
+    clean = re.sub(r"^[\s|:•\-–—]+", "", clean)
+    clean = re.sub(r"\s+", " ", clean).strip(" |·-–—")
+    if len(clean) <= limit:
+        return clean
+    cut = clean[:limit].rsplit(" ", 1)[0]
+    return cut + "…"
 _STOP = set(
     "the a an and or of in on to for with at by from as is are was be after"
     " amid over under his her their its says say said new live update updates"
@@ -100,6 +121,7 @@ def top_signals() -> list[dict]:
             "score": score, "reasons": reasons, "linked_story": linked,
             "handle": t["handle"], "display_name": t["display_name"],
             "avatar_url": t.get("avatar_url") or "",
+            "summary": _summarize(t["text"]),
             "created_at": t["created_at"],
             "trust_score": trust, "stream_column": t["stream_column"],
         })
