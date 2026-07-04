@@ -224,12 +224,23 @@ const StoryDesk = (() => {
   }
 
   async function refresh() {
-    document.getElementById('refresh-icon').textContent = '…';
-    setUpdated('refreshing…');
+    const icon = document.getElementById('refresh-icon');
+    icon.textContent = '…';
+    setUpdated('finding new stories…');
     setLive('busy');
-    try { await api('/api/ingest'); } finally {
-      setTimeout(() => { document.getElementById('refresh-icon').textContent = '⟳'; }, 800);
+    // Run a full ingest cycle (~25s on serverless), then repaint the board
+    // from the latest rundown — don't wait for the next background poll. If the
+    // cycle ever times out, still repaint with whatever committed.
+    try { await api('/api/ingest'); } catch { /* repaint below regardless */ }
+    try {
+      const data = await (await fetch('/api/rundown')).json();
+      if (Array.isArray(data)) render(data);
+      setLive('live');
+      setUpdated('Refreshed just now');
+    } catch {
+      setLive('offline');
     }
+    icon.textContent = '⟳';
   }
   document.getElementById('refresh-stories').addEventListener('click', refresh);
 
