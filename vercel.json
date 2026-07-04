@@ -4,6 +4,10 @@
     { "source": "/(.*)", "destination": "/api/index" }
   ],
   "functions": {
-    "api/index.py": { "maxDuration": 60, "memory": 1024 }
-  }
+    "api/index.py": { "maxDuration": 60 }
+  },
+  "crons": [
+    { "path": "/api/cron/tick", "schedule": "0 * * * *" },
+    { "path": "/api/cron/live", "schedule": "30 * * * *" }
+  ]
 }

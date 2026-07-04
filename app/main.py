@@ -222,30 +222,35 @@ async def manual_brief():
     )
 
 
-def _require_cron(secret: str) -> None:
-    """Cron endpoints are GET (so external pingers like cron-job.org / Vercel
-    Cron work) and guarded by a shared secret. When CRON_SECRET is unset the
-    endpoints refuse to run rather than execute unauthenticated."""
-    if not config.CRON_SECRET or secret != config.CRON_SECRET:
+def _require_cron(secret: str, request: "Request") -> None:
+    """Cron endpoints are GET (so external pingers like cron-job.org and Vercel
+    Cron work) and guarded by the shared CRON_SECRET. Vercel Cron sends it as
+    `Authorization: Bearer <CRON_SECRET>`; external pingers use `?secret=`.
+    Either is accepted. When CRON_SECRET is unset the endpoints refuse to run."""
+    if not config.CRON_SECRET:
+        raise HTTPException(403, "forbidden")
+    auth = request.headers.get("authorization", "")
+    header_secret = auth[7:] if auth.lower().startswith("bearer ") else ""
+    if secret != config.CRON_SECRET and header_secret != config.CRON_SECRET:
         raise HTTPException(403, "forbidden")
 
 
 @app.get("/api/cron/tick")
-def cron_tick(secret: str = ""):
-    _require_cron(secret)
+def cron_tick(request: Request, secret: str = ""):
+    _require_cron(secret, request)
     return ingest.run_ingest_cycle()
 
 
 @app.get("/api/cron/live")
-def cron_live(secret: str = ""):
-    _require_cron(secret)
+def cron_live(request: Request, secret: str = ""):
+    _require_cron(secret, request)
     from app.news import live_monitor
     return live_monitor.run_live_cycle()
 
 
 @app.get("/api/cron/brief")
-def cron_brief(secret: str = ""):
-    _require_cron(secret)
+def cron_brief(request: Request, secret: str = ""):
+    _require_cron(secret, request)
     from app import briefing
     return briefing.generate_and_send()
 
