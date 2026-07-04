@@ -53,10 +53,13 @@ _TV_NOISE = (
     " hosts episode"
 )
 # prepositions/fillers that must never become discovery keywords
+# (incl. the gather/arrive/visit/attend verb families — pure event scaffolding)
 _FILLERS = (
     "under over after amid into from with about between against before during"
     " since while this that these those their there where when what says said"
-    " tells told big top"
+    " tells told big top more most other others every here also"
+    " gather gathers gathered gathering arrive arrives arrived arriving arrival"
+    " visit visits visited visiting attend attends attended attending"
 )
 _STOP = set((_MONTHS + " " + _WEEKDAYS + " " + _TV_NOISE + " " + _FILLERS).split())
 
@@ -73,6 +76,33 @@ def load_channels() -> list[dict]:
         return json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return []
+
+
+_channel_token_cache: tuple = (None, frozenset())
+
+
+def _channel_stop_tokens() -> frozenset:
+    """Tokens derived from the configured channel names — a channel's own name
+    must never become a discovery keyword. Built from live_channels.json at
+    runtime (cached on file mtime) so newly added channels are auto-excluded:
+    each name contributes its lowercased words plus the squashed form
+    ("ndtv", "24x7", "ndtv24x7", "timesnow", "cnnnews18", "wion", ...)."""
+    global _channel_token_cache
+    path = config.DATA_DIR / "live_channels.json"
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = None
+    if _channel_token_cache[0] == mtime:
+        return _channel_token_cache[1]
+    tokens: set[str] = set()
+    for ch in load_channels():
+        words = _word_re.sub("", (ch.get("name") or "").lower()).split()
+        tokens.update(words)
+        if words:
+            tokens.add("".join(words))  # squashed: "timesnow", "cnnnews18"
+    _channel_token_cache = (mtime, frozenset(tokens))
+    return _channel_token_cache[1]
 
 
 def _clean_title(title: str) -> str:
@@ -101,10 +131,13 @@ def _clean_title(title: str) -> str:
 
 def _tokens(title: str) -> list[str]:
     """Significant tokens (mirrors sources._sig_tokens): lowercase, alnum-only,
-    len>3, not a stopword/month/weekday/tv-noise word, not all digits."""
+    len>3, not a stopword/month/weekday/tv-noise/channel-name word, not all
+    digits."""
+    channel_stop = _channel_stop_tokens()
     return [
         w for w in _word_re.sub("", (title or "").lower()).split()
-        if len(w) > 3 and w not in _STOP and not w.isdigit()
+        if len(w) > 3 and w not in _STOP and w not in channel_stop
+        and not w.isdigit()
     ]
 
 
@@ -183,7 +216,11 @@ def poll_live_coverage() -> None:
 
 
 def _window_rows() -> list[dict]:
-    """Recent live-coverage rows within the window (terms parsed)."""
+    """Recent live-coverage rows within the window (terms parsed).
+
+    Terms are re-filtered through the *current* stopword + channel-name sets at
+    read time: clips that scrolled off a feed keep their stored terms, so this
+    keeps old rows consistent whenever the exclusion lists grow."""
     window_start = (datetime.now(timezone.utc)
                     - timedelta(hours=config.LIVE_WINDOW_HOURS)).isoformat()
     with db.connect() as con:
@@ -191,7 +228,12 @@ def _window_rows() -> list[dict]:
             "SELECT channel, title, terms FROM live_coverage WHERE published_at >= ?",
             (window_start,),
         ).fetchall()
-    return db.rows_to_dicts(rows)
+    parsed = db.rows_to_dicts(rows)
+    channel_stop = _channel_stop_tokens()
+    for row in parsed:
+        row["terms"] = [t for t in row["terms"]
+                        if t not in _STOP and t not in channel_stop]
+    return parsed
 
 
 def match_to_board() -> int:

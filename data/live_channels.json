@@ -1,4 +1,8 @@
 [
   {"name": "NDTV 24x7", "channel_id": "UCZFMm1mMw0F81Z37aaEzTUA"},
-  {"name": "India Today", "channel_id": "UCYPvAwZP8pZhSMW8qs7cVCw"}
+  {"name": "India Today", "channel_id": "UCYPvAwZP8pZhSMW8qs7cVCw"},
+  {"name": "Times Now", "channel_id": "UC6RJ7-PaXg6TIH2BzZfTV7w"},
+  {"name": "Republic TV", "channel_id": "UCwqusr8YDwM-3mEYTDeJHzw"},
+  {"name": "CNN-News18", "channel_id": "UCef1-8eOpJgud7szVPlZQAQ"},
+  {"name": "WION", "channel_id": "UC_gUM8rL-Lrg6O3adPW9K1g"}
 ]
