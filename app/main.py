@@ -16,6 +16,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import re
 from contextlib import asynccontextmanager
 
@@ -409,17 +410,25 @@ async def sim_spike():
 @app.get("/", response_class=HTMLResponse)
 def index():
     html = (config.STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    js_dir = config.STATIC_DIR / "js"
-    mtimes = [(config.STATIC_DIR / "index.html").stat().st_mtime]
-    mtimes += [p.stat().st_mtime for p in js_dir.glob("*.js")]
-    stamp = int(max(mtimes)) if mtimes else 0
+    # Cache-bust the JS. On Vercel, deployed file mtimes are reset to a fixed
+    # epoch, so mtime-based stamps never change between deploys and browsers
+    # keep serving stale JS. Prefer the per-deploy git commit SHA there.
+    stamp = os.getenv("VERCEL_GIT_COMMIT_SHA") or os.getenv("VERCEL_DEPLOYMENT_ID")
+    if not stamp:
+        js_dir = config.STATIC_DIR / "js"
+        mtimes = [(config.STATIC_DIR / "index.html").stat().st_mtime]
+        mtimes += [p.stat().st_mtime for p in js_dir.glob("*.js")]
+        stamp = int(max(mtimes)) if mtimes else 0
+    stamp = str(stamp)[:12]
 
     def _bust(match: "re.Match") -> str:
         name = match.group(1)
         return f'src="/static/js/{name}.js?v={stamp}"'
 
     html = re.sub(r'src="/static/js/([^".?]+)\.js"', _bust, html)
-    return html
+    # HTML must always revalidate so the freshest version stamp reaches the
+    # browser; the versioned JS URLs below can then be cached safely.
+    return HTMLResponse(html, headers={"Cache-Control": "no-cache, must-revalidate"})
 
 
 app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
