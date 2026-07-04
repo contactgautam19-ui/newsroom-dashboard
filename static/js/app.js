@@ -108,7 +108,7 @@ const Toast = (() => {
     if (el) return el;
     el = document.createElement('div');
     el.id = 'toast';
-    el.className = 'fade-up fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-navy text-white rounded-xl px-4 py-2.5 text-[13px] shadow-lg hidden';
+    el.className = 'fade-up fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-navy text-white rounded-xl px-4 py-2.5 text-[13px] shadow-lg hidden mb-[env(safe-area-inset-bottom)]';
     document.body.appendChild(el);
     return el;
   }

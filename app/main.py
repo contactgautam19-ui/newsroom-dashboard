@@ -13,13 +13,15 @@ Endpoints:
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
 from contextlib import asynccontextmanager
 
-from fastapi import Body, FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
+                               StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
 from app import broker, config, db, events, scheduler
@@ -37,6 +39,14 @@ async def lifespan(app: FastAPI):
     log.info("seeded %d handles", seeded)
     pipeline.load_handles()
     events.bind_loop(asyncio.get_running_loop())
+    if config.IS_SERVERLESS:
+        # No background threads on Vercel: the scheduler and warm executors are
+        # skipped. Refresh loops are driven by the /api/cron/* endpoints (and
+        # the client auto-refresh) instead. init_db + seeding above are cheap
+        # and idempotent (IF NOT EXISTS + upserts), so they stay.
+        log.info("serverless mode: scheduler + warm cycles disabled")
+        yield
+        return
     scheduler.start()
     # first boot with an empty board: pull a cycle immediately
     with db.connect() as con:
@@ -53,8 +63,84 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Newsroom Intelligence Dashboard", lifespan=lifespan)
 
 
+# --------------------------------------------------------------------------
+# Shared passcode gate (active only when PASSCODE is set — local dev unaffected)
+# --------------------------------------------------------------------------
+def _passcode_hash() -> str:
+    return hashlib.sha256(config.PASSCODE.encode()).hexdigest()
+
+
+# paths reachable without the cookie: the login flow, static assets, and the
+# cron endpoints (which carry their own secret)
+_AUTH_EXEMPT_PREFIXES = ("/login", "/api/login", "/static/", "/api/cron/")
+
+
+@app.middleware("http")
+async def passcode_gate(request: Request, call_next):
+    if not config.PASSCODE:
+        return await call_next(request)  # no-op when unset (local dev)
+    path = request.url.path
+    if any(path == p or path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
+        return await call_next(request)
+    if request.cookies.get("nk_auth") == _passcode_hash():
+        return await call_next(request)
+    # unauthenticated: JSON 401 for API calls, redirect to /login for browsers
+    if path.startswith("/api/"):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return RedirectResponse("/login", status_code=302)
+
+
+_LOGIN_HTML = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Newsroom</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0B1526;font-family:-apple-system,Segoe UI,Arial,sans-serif;">
+<div style="background:#fff;border-radius:12px;padding:36px 40px;width:320px;box-shadow:0 12px 40px rgba(0,0,0,.4);text-align:center;">
+  <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:20px;">
+    <span style="width:12px;height:12px;border-radius:50%;background:#E02424;display:inline-block;"></span>
+    <span style="font-size:20px;font-weight:700;color:#0B1526;">Newsroom</span>
+  </div>
+  <input id="pc" type="password" placeholder="Passcode" autofocus
+    style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #cfd8e3;border-radius:8px;font-size:15px;margin-bottom:12px;">
+  <button id="go" style="width:100%;padding:11px;border:0;border-radius:8px;background:#E02424;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">Enter newsroom</button>
+  <div id="err" style="color:#E02424;font-size:13px;margin-top:12px;height:16px;"></div>
+</div>
+<script>
+const inp=document.getElementById('pc'),err=document.getElementById('err');
+async function submit(){
+  err.textContent='';
+  const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({passcode:inp.value})});
+  const d=await r.json();
+  if(d.ok){location.href='/';}else{err.textContent='Wrong passcode';inp.value='';inp.focus();}
+}
+document.getElementById('go').onclick=submit;
+inp.addEventListener('keydown',e=>{if(e.key==='Enter')submit();});
+</script>
+</body></html>"""
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page():
+    return _LOGIN_HTML
+
+
+@app.post("/api/login")
+def do_login(payload: dict = Body(...)):
+    if config.PASSCODE and payload.get("passcode") == config.PASSCODE:
+        resp = JSONResponse({"ok": True})
+        resp.set_cookie(
+            "nk_auth", _passcode_hash(), max_age=60 * 60 * 24 * 30,
+            httponly=True, samesite="lax", secure=config.IS_SERVERLESS,
+        )
+        return resp
+    return JSONResponse({"ok": False}, status_code=401)
+
+
 @app.get("/api/stream")
 async def stream():
+    if config.IS_SERVERLESS:
+        # No long-lived connections on Vercel: the client falls back to polling.
+        return JSONResponse({"disabled": True}, status_code=404)
     q = events.subscribe()
 
     async def gen():
@@ -134,6 +220,34 @@ async def manual_brief():
     return await asyncio.get_running_loop().run_in_executor(
         None, briefing.generate_and_send
     )
+
+
+def _require_cron(secret: str) -> None:
+    """Cron endpoints are GET (so external pingers like cron-job.org / Vercel
+    Cron work) and guarded by a shared secret. When CRON_SECRET is unset the
+    endpoints refuse to run rather than execute unauthenticated."""
+    if not config.CRON_SECRET or secret != config.CRON_SECRET:
+        raise HTTPException(403, "forbidden")
+
+
+@app.get("/api/cron/tick")
+def cron_tick(secret: str = ""):
+    _require_cron(secret)
+    return ingest.run_ingest_cycle()
+
+
+@app.get("/api/cron/live")
+def cron_live(secret: str = ""):
+    _require_cron(secret)
+    from app.news import live_monitor
+    return live_monitor.run_live_cycle()
+
+
+@app.get("/api/cron/brief")
+def cron_brief(secret: str = ""):
+    _require_cron(secret)
+    from app import briefing
+    return briefing.generate_and_send()
 
 
 @app.post("/api/x/refresh")
@@ -225,11 +339,15 @@ def save_settings(payload: dict = Body(...)):
 
 @app.get("/api/ops")
 def ops_summary():
+    from datetime import datetime, timezone
     from app.news.sources import load_sources
     from app.news import live_monitor
+    # portable "today" comparison: pass the ISO date from Python so SQLite and
+    # Postgres share one query (created_at is stored as an ISO timestamp string)
+    today_iso = datetime.now(timezone.utc).date().isoformat()
     with db.connect() as con:
         briefs_today = con.execute(
-            "SELECT COUNT(*) c FROM briefings WHERE created_at >= date('now')"
+            "SELECT COUNT(*) c FROM briefings WHERE created_at >= ?", (today_iso,)
         ).fetchone()["c"]
         discarded = db.rows_to_dicts(con.execute(
             "SELECT handle, text, discard_reason, created_at FROM tweets "

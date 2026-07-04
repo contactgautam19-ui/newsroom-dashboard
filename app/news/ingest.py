@@ -147,9 +147,10 @@ def _persist_story(con, story, score, confidence, verdict, now_iso) -> tuple[int
         developed = set(merged) != prev_sources or score["total"] > existing["base_score"]
         stale_cycles = 0 if developed else existing["stale_cycles"] + 1
         decay = guardrails.decay_for_stale_cycles(stale_cycles)
+        _clamp = "GREATEST" if db.IS_PG else "MAX"
         con.execute(
-            """UPDATE stories SET last_updated_at=?, sources=?, base_score=?,
-               decay=?, score=MAX(0, ? + trend_boost - ?), confidence=?, status=?,
+            f"""UPDATE stories SET last_updated_at=?, sources=?, base_score=?,
+               decay=?, score={_clamp}(0, ? + trend_boost - ?), confidence=?, status=?,
                needs_review=?, stale_cycles=?, trend_base=?,
                discovered_via=COALESCE(?, discovered_via), active=1 WHERE id=?""",
             (now_iso, json.dumps(merged), score["total"], decay,
@@ -281,12 +282,15 @@ def run_ingest_cycle(manual: bool = False) -> dict:
         if seen_ids:
             placeholders = ",".join("?" * len(seen_ids))
             age_cutoff = (now - timedelta(minutes=55)).isoformat()
+            # scalar clamps: SQLite MIN/MAX vs Postgres LEAST/GREATEST
+            _lo = "LEAST" if db.IS_PG else "MIN"
+            _hi = "GREATEST" if db.IS_PG else "MAX"
             con.execute(
                 f"""UPDATE stories SET stale_cycles = stale_cycles + 1,
                     last_aged_at = ?,
-                    decay = MIN(?, (stale_cycles + 1) * ?),
-                    score = MAX(0, base_score + trend_boost
-                                - MIN(?, (stale_cycles + 1) * ?))
+                    decay = {_lo}(?, (stale_cycles + 1) * ?),
+                    score = {_hi}(0, base_score + trend_boost
+                                - {_lo}(?, (stale_cycles + 1) * ?))
                     WHERE active = 1 AND id NOT IN ({placeholders})
                     AND (last_aged_at IS NULL OR last_aged_at < ?)""",
                 [now_iso, config.REPETITIVE_DECAY_CAP, config.REPETITIVE_DECAY_PER_HOUR,

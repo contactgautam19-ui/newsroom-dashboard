@@ -130,8 +130,10 @@ def _apply_boost(con, story, term, boost, velocity_pct, posts_per_hour,
     if high_demand and needs_review:
         needs_review = 0  # >5000/hr overrides the low-confidence hold
 
+    # scalar clamp-at-zero: SQLite MAX(0, ...) vs Postgres GREATEST(0, ...)
+    _clamp = "GREATEST" if db.IS_PG else "MAX"
     con.execute(
-        """UPDATE stories SET trend_boost=?, score=MAX(0, base_score + ? - decay),
+        f"""UPDATE stories SET trend_boost=?, score={_clamp}(0, base_score + ? - decay),
            high_demand=?, needs_review=?, last_updated_at=? WHERE id=?""",
         (new_boost, new_boost, int(high_demand), needs_review, now_iso, story["id"]),
     )

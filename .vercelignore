@@ -1,0 +1,8 @@
+.env
+newsroom.db
+newsroom.db-shm
+newsroom.db-wal
+briefings_out/
+__pycache__/
+.claude/
+landing.html

@@ -1,4 +1,5 @@
 import os
+import tempfile
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -18,10 +19,24 @@ def _int(name: str, default: int) -> int:
         return default
 
 
+# Deployment / storage mode
+#   DATABASE_URL set   -> Postgres (Supabase) via psycopg2 (see app/db.py)
+#   DATABASE_URL unset -> local SQLite dev (default, unchanged)
+DATABASE_URL = os.getenv("DATABASE_URL", "")
+# Vercel injects VERCEL=1 in its serverless runtime. In serverless mode there
+# are no background threads (scheduler), no SSE, and the filesystem is read-only
+# except /tmp — refresh loops are driven by the /api/cron/* endpoints instead.
+IS_SERVERLESS = bool(os.getenv("VERCEL"))
+CRON_SECRET = os.getenv("CRON_SECRET", "")   # guards /api/cron/* endpoints
+PASSCODE = os.getenv("PASSCODE", "")          # shared-gate passcode (empty = off)
+
 DB_PATH = BASE_DIR / "newsroom.db"
 DATA_DIR = BASE_DIR / "data"
 STATIC_DIR = BASE_DIR / "static"
-BRIEF_OUT_DIR = BASE_DIR / "briefings_out"
+# Serverless filesystem is read-only except /tmp, so briefs are written there.
+BRIEF_OUT_DIR = (
+    Path(tempfile.gettempdir()) if IS_SERVERLESS else BASE_DIR / "briefings_out"
+)
 
 GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS", "")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")

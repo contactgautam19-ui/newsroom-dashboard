@@ -52,7 +52,7 @@ const StoryDesk = (() => {
     const ageColor = mins <= 60 ? 'text-green6' : mins <= 180 ? 'text-amber6' : 'text-sub';
     const corroborated = (s.sources || []).length > 1;
     return `
-    <article class="fade-up bg-white border border-line rounded-2xl p-4 md:p-5 flex gap-4" style="border-left:4px solid ${st.bar}" data-id="${s.id}">
+    <article class="fade-up bg-white border border-line rounded-2xl p-4 md:p-5 flex flex-col sm:flex-row gap-4" style="border-left:4px solid ${st.bar}" data-id="${s.id}">
       <div class="text-center shrink-0 hidden sm:block pt-1">
         <div class="w-[52px] h-[52px] rounded-full flex items-center justify-center text-[19px] font-bold" style="background:${st.circleBg};color:${st.circleText}">${s.score}</div>
         <div class="text-[9.5px] font-semibold tracking-widest text-sub mt-1.5">SCORE</div>
@@ -78,15 +78,11 @@ const StoryDesk = (() => {
         </p>
         <p class="text-[12.5px] text-sub mt-1.5"><span class="font-semibold text-ink/60">Why:</span> ${esc(whyLine(s))}</p>
       </div>
-      <div class="flex flex-col gap-2 shrink-0 justify-center items-end">
-        <div class="flex items-start gap-1.5">
-          <div class="flex flex-col gap-2">
-            <button onclick="StoryDesk.pick(${s.id})" class="text-[12.5px] font-semibold px-4 py-2 rounded-xl ${s.picked ? 'bg-green1 text-green8 border border-green6/30' : 'bg-navy text-white hover:bg-navy2'} whitespace-nowrap transition-colors">${s.picked ? '✓ Picked' : 'Pick Story'}</button>
-            <button onclick="StoryDesk.openPack(${s.id})" class="text-[12.5px] font-semibold px-4 py-2 rounded-xl border border-line bg-white hover:border-ink whitespace-nowrap">Story Pack</button>
-          </div>
-          <div class="relative">
-            <button onclick="StoryDesk.menu(event, ${s.id})" class="text-sub hover:text-ink px-1 py-0.5 text-[17px] leading-none">⋮</button>
-          </div>
+      <div class="w-full sm:w-auto flex sm:flex-col flex-row gap-2 items-stretch shrink-0 sm:justify-center">
+        <button onclick="StoryDesk.pick(${s.id})" class="flex-1 sm:flex-none text-[12.5px] font-semibold px-4 py-2 rounded-xl ${s.picked ? 'bg-green1 text-green8 border border-green6/30' : 'bg-navy text-white hover:bg-navy2'} whitespace-nowrap transition-colors">${s.picked ? '✓ Picked' : 'Pick Story'}</button>
+        <button onclick="StoryDesk.openPack(${s.id})" class="flex-1 sm:flex-none text-[12.5px] font-semibold px-4 py-2 rounded-xl border border-line bg-white hover:border-ink whitespace-nowrap">Story Pack</button>
+        <div class="relative shrink-0">
+          <button onclick="StoryDesk.menu(event, ${s.id})" class="text-sub hover:text-ink p-2 text-[17px] leading-none">⋮</button>
         </div>
       </div>
     </article>`;
@@ -255,9 +251,9 @@ const StoryDesk = (() => {
       <div class="mb-4 border border-line rounded-xl p-3">
         <p class="text-[11.5px] font-semibold uppercase tracking-widest text-sub mb-2">Write with AI</p>
         <div id="ai-write-buttons" class="flex gap-2 flex-wrap">
-          <button onclick="StoryDesk.writeArticle(${id}, 'web')" class="ai-write-btn rounded-xl border border-line font-semibold text-[12.5px] px-3 py-2 hover:border-ink">Web article</button>
-          <button onclick="StoryDesk.writeArticle(${id}, 'broadcast')" class="ai-write-btn rounded-xl border border-line font-semibold text-[12.5px] px-3 py-2 hover:border-ink">Broadcast script</button>
-          <button onclick="StoryDesk.writeArticle(${id}, 'social')" class="ai-write-btn rounded-xl border border-line font-semibold text-[12.5px] px-3 py-2 hover:border-ink">Social copy</button>
+          <button onclick="StoryDesk.writeArticle(${id}, 'web')" class="ai-write-btn flex-1 min-w-[30%] rounded-xl border border-line font-semibold text-[12.5px] px-3 py-2 hover:border-ink">Web article</button>
+          <button onclick="StoryDesk.writeArticle(${id}, 'broadcast')" class="ai-write-btn flex-1 min-w-[30%] rounded-xl border border-line font-semibold text-[12.5px] px-3 py-2 hover:border-ink">Broadcast script</button>
+          <button onclick="StoryDesk.writeArticle(${id}, 'social')" class="ai-write-btn flex-1 min-w-[30%] rounded-xl border border-line font-semibold text-[12.5px] px-3 py-2 hover:border-ink">Social copy</button>
         </div>
         <p id="ai-write-status" class="text-[12px] text-sub mt-2"></p>
         <div id="ai-write-output" class="mt-3 space-y-3"></div>

@@ -1,11 +1,37 @@
-"""SQLite storage. One connection per call site via connect(); WAL mode so the
-scheduler thread and request handlers can read/write concurrently."""
+"""Storage layer with two interchangeable backends.
+
+Local dev (default, unchanged): SQLite. One connection per call site via
+connect(); WAL mode so the scheduler thread and request handlers can read/write
+concurrently.
+
+Serverless / Vercel: Postgres (Supabase) — activated when ``DATABASE_URL`` is
+set. A thin wrapper (``_PGConnection`` / ``_PGCursor``) makes psycopg2 behave
+like the sqlite3 connection the rest of the codebase expects:
+
+  * ``with db.connect() as con:``   commits on clean exit, rolls back on error
+  * ``con.execute(sql, params)``    returns a cursor with .fetchone/.fetchall/
+                                    .rowcount/.lastrowid; ``?`` placeholders and
+                                    a few SQLite-only SQL idioms are translated
+  * ``con.executescript(sql)``      used only by init_db()
+  * ``row["col"]``                  RealDictCursor rows behave like dicts
+
+``IS_PG`` lets the few statements that can't be translated purely
+mechanically (scalar MAX/MIN inside UPDATE ... SET) pick a portable form at the
+call site.
+"""
 
 import json
+import re
 import sqlite3
 from typing import Any, Iterable
 
 from app import config
+
+IS_PG = bool(config.DATABASE_URL)
+
+if IS_PG:
+    import psycopg2
+    import psycopg2.extras
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS stories (
@@ -117,14 +143,6 @@ CREATE TABLE IF NOT EXISTS live_coverage (
 """
 
 
-def connect() -> sqlite3.Connection:
-    con = sqlite3.connect(config.DB_PATH, timeout=15)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA journal_mode=WAL")
-    con.execute("PRAGMA busy_timeout=15000")
-    return con
-
-
 MIGRATIONS = [
     # keyword-driven discovery (2026-07): where a story was found + how many
     # Trend Momentum points came from discovery vs the broker's live boost
@@ -144,7 +162,175 @@ MIGRATIONS = [
 ]
 
 
+# --------------------------------------------------------------------------
+# Postgres SQL translation
+# --------------------------------------------------------------------------
+# Tables whose INSERT should return the new serial id so a caller reading
+# .lastrowid keeps working. These are exactly the tables with an ``id`` serial
+# column; tables with text/composite primary keys (tweets, handles, settings,
+# score_breakdowns, live_coverage) must NOT get a RETURNING id clause.
+_ID_TABLES = ("stories", "articles", "briefings", "velocity_events")
+
+_LIVE_COVERAGE_UPSERT = (
+    "INSERT INTO live_coverage"
+)
+_LIVE_COVERAGE_ON_CONFLICT = (
+    " ON CONFLICT (video_id) DO UPDATE SET "
+    "channel=EXCLUDED.channel, title=EXCLUDED.title, "
+    "published_at=EXCLUDED.published_at, fetched_at=EXCLUDED.fetched_at, "
+    "terms=EXCLUDED.terms"
+)
+
+_insert_table_re = re.compile(r"INSERT\s+INTO\s+([a-z_]+)", re.IGNORECASE)
+
+
+def translate(sql: str) -> str:
+    """Translate a SQLite SQL string into portable Postgres SQL.
+
+    Only mechanical rewrites live here; the scalar MAX(0,...)/MIN(...) inside
+    UPDATE ... SET expressions are handled at the call sites (guarded by IS_PG)
+    because a blind regex there would also rewrite aggregate MAX/MIN. This
+    function is deliberately pure so it can be unit-tested without a PG server.
+    """
+    out = sql
+
+    # INSERT OR REPLACE INTO live_coverage -> proper upsert (the only OR REPLACE)
+    if re.search(r"INSERT\s+OR\s+REPLACE\s+INTO\s+live_coverage", out, re.IGNORECASE):
+        out = re.sub(
+            r"INSERT\s+OR\s+REPLACE\s+INTO\s+live_coverage",
+            "INSERT INTO live_coverage",
+            out,
+            flags=re.IGNORECASE,
+        )
+        out = out.rstrip().rstrip(";") + _LIVE_COVERAGE_ON_CONFLICT
+
+    # INSERT OR IGNORE INTO x -> INSERT INTO x ... ON CONFLICT DO NOTHING
+    if re.search(r"INSERT\s+OR\s+IGNORE\s+INTO", out, re.IGNORECASE):
+        out = re.sub(r"INSERT\s+OR\s+IGNORE\s+INTO", "INSERT INTO", out,
+                     flags=re.IGNORECASE)
+        out = out.rstrip().rstrip(";") + " ON CONFLICT DO NOTHING"
+
+    # ? placeholders -> %s (SQL strings in this codebase contain no literal
+    # question marks besides placeholders — verified by grep)
+    out = out.replace("?", "%s")
+
+    # RETURNING id for id-table inserts so .lastrowid works. Skip statements
+    # that already have RETURNING or ON CONFLICT DO NOTHING (the latter may
+    # insert no row, so RETURNING would yield nothing to fetch).
+    m = _insert_table_re.match(out.lstrip())
+    if (m and m.group(1).lower() in _ID_TABLES
+            and "RETURNING" not in out.upper()
+            and "ON CONFLICT DO NOTHING" not in out.upper()):
+        out = out.rstrip().rstrip(";") + " RETURNING id"
+
+    return out
+
+
+def _translate_script(sql: str) -> list[str]:
+    """Translate a CREATE-heavy schema script for Postgres and split it into
+    individual statements (psycopg2 has no executescript)."""
+    sql = sql.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
+    return [s.strip() for s in sql.split(";") if s.strip()]
+
+
+# --------------------------------------------------------------------------
+# Postgres connection / cursor wrappers (sqlite3-compatible surface)
+# --------------------------------------------------------------------------
+class _PGCursor:
+    """Wraps a psycopg2 RealDictCursor; exposes .fetchone/.fetchall/.rowcount/
+    .lastrowid and is iterable like sqlite3 cursors."""
+
+    def __init__(self, cur):
+        self._cur = cur
+        self.lastrowid = None
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+    def __iter__(self):
+        return iter(self._cur.fetchall())
+
+    @property
+    def rowcount(self):
+        return self._cur.rowcount
+
+
+class _PGConnection:
+    """sqlite3.Connection-compatible wrapper over a psycopg2 connection.
+
+    Context-manager semantics mirror sqlite3: commit on clean exit, rollback on
+    exception, and always close the underlying connection (serverless-friendly:
+    one connection per connect() call, Supabase's pooler recycles it)."""
+
+    def __init__(self, raw):
+        self._raw = raw
+
+    def execute(self, sql: str, params: Iterable = ()):  # noqa: A003
+        translated = translate(sql)
+        cur = self._raw.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(translated, tuple(params))
+        wrapped = _PGCursor(cur)
+        if translated.rstrip().upper().endswith("RETURNING ID"):
+            row = cur.fetchone()
+            if row is not None:
+                wrapped.lastrowid = row["id"]
+        return wrapped
+
+    def executescript(self, sql: str):
+        cur = self._raw.cursor()
+        for stmt in _translate_script(sql):
+            cur.execute(stmt)
+        cur.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is None:
+            self._raw.commit()
+        else:
+            self._raw.rollback()
+        self._raw.close()
+        return False
+
+
+def connect():
+    """Open a fresh connection. SQLite locally; Postgres when DATABASE_URL set."""
+    if IS_PG:
+        raw = psycopg2.connect(config.DATABASE_URL)
+        return _PGConnection(raw)
+    con = sqlite3.connect(config.DB_PATH, timeout=15)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA busy_timeout=15000")
+    return con
+
+
 def init_db() -> None:
+    if IS_PG:
+        # executescript for the schema, then each migration in its own
+        # autocommit transaction so a duplicate-column error only rolls back
+        # that one ALTER (mirrors the SQLite try/except-per-migration pattern).
+        with connect() as con:
+            con.executescript(SCHEMA)
+        raw = psycopg2.connect(config.DATABASE_URL)
+        raw.autocommit = True
+        try:
+            for stmt in MIGRATIONS:
+                cur = raw.cursor()
+                try:
+                    cur.execute(stmt)
+                except psycopg2.Error:
+                    pass  # column already exists (autocommit isolates the error)
+                finally:
+                    cur.close()
+        finally:
+            raw.close()
+        return
+
     with connect() as con:
         con.executescript(SCHEMA)
         for stmt in MIGRATIONS:
@@ -154,8 +340,8 @@ def init_db() -> None:
                 pass  # column already exists
 
 
-def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
-    d = dict(row)
+def row_to_dict(row) -> dict[str, Any]:
+    d = dict(row)  # sqlite3.Row and psycopg2 RealDictRow both convert cleanly
     for key in ("flags", "media", "sources", "terms", "evidence", "rival_coverage"):
         if key in d and isinstance(d[key], str):
             try:
@@ -165,5 +351,5 @@ def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return d
 
 
-def rows_to_dicts(rows: Iterable[sqlite3.Row]) -> list[dict[str, Any]]:
+def rows_to_dicts(rows: Iterable) -> list[dict[str, Any]]:
     return [row_to_dict(r) for r in rows]
