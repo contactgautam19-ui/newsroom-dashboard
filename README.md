@@ -1,20 +1,37 @@
 # Newsroom Intelligence Dashboard
 
-A light-theme, editor-first newsroom dashboard with three pages:
+A light-theme, editor-first newsroom dashboard: a navy sidebar shell around three desks and five story views.
 
-- **Story desk** (home): the decision page. Ranked story cards with a score badge, status pill, freshness age, and a plain-English "Why" line; category/Breaking filters; a refresh button (stories also auto-refresh every 10 minutes within the active window — configurable in Ops). **Pick story** marks a story as taken; **Story pack** opens everything a writer needs: all corroborating sources, the evidence trail, related posts from monitored X handles, and per-platform format suggestions (X / Instagram / Facebook, per the PRD omnichannel framework).
-- **X desk**: three columns of real tweets with manual refresh and the API budget badge.
-- **Ops**: the machinery — feed health, keywords searched, guardrail audit, auto-refresh interval, email brief controls. Editors never need this page.
+- **Sidebar shell**: navy fixed sidebar with live/offline indicator, clock, and flash-alert badge. Views: **Top Stories**, **My Picks**, **Assignments**, **Story Desk** (home), **X Desk**, **Ops Desk**, **Analytics**, **Alerts**.
+- **Story desk**: the decision page. Ranked story cards with a score badge, status pill, freshness age, rival on-air chips, and a plain-English "Why" line; category/Breaking/Developing/Picked filter chips; a refresh button (stories also auto-refresh on page open if the last ingest is stale, and every `NEWS_REFRESH_MINUTES` within the active window — configurable in Ops). **Pick story** marks a story as taken — it leaves the main board, a confirmation toast offers **Undo**, and the story reappears under the **Picked (n)** filter chip and the **My Picks** / **Assignments** sidebar views. **Story pack** opens everything a writer needs: all corroborating sources, the score anatomy, the evidence trail, related posts from monitored X handles, per-platform format suggestions (X / Instagram / Facebook), and the AI article writer.
+- **X desk**: three columns of real tweets (Institutional & Government / Rival & Competitor / Field Reporters & Responders) with manual refresh and the API budget badge, plus a Top 5 signals block for posts needing editorial attention.
+- **Ops desk**: the machinery — feed health, keywords searched, guardrail audit, auto-refresh interval, live rival-TV monitor status, AI writer settings, email brief controls. Editors never need this page day-to-day.
+- **Analytics**: board balance (category mix, status split) and scoring anatomy across the live board.
+- **Alerts**: breaking-news flashes and viral X acceleration events, with a flash strip that slides down over any page and jumps straight to the story.
 
-The layout is fully responsive (columns stack, tabs scroll on phones).
+The layout is fully responsive (columns stack, sidebar collapses to a drawer on phones).
 
-## The two engines behind it
+## AI article writer
 
-- **AI News Monitoring Agent**: every cycle (hourly 06:00–21:00, or faster via AUTO refresh) it (1) collects hot keywords from the monitored X accounts and Google Trends India, (2) runs each through a **past-hour Google News search** (`when:1h` — the automated version of the editor's manual keyword → News → Past hour workflow), (3) polls the curated 50-source RSS matrix, then clusters everything cross-outlet, drops candidates older than `FRESHNESS_HOURS` (3h), retires board stories older than `RETIRE_HOURS` (12h), and ranks the survivors on the evidence-based 100-point framework with editorial guardrails (two-source rule, <70% confidence review flag, repetitive decay). Stories found via a trending keyword carry a 🔍 chip and earn Search Trend Momentum points with the keyword cited as evidence.
-- **X Monitoring Desk**: three independently scrolling columns (A: Institutional & Government, B: Rival/Competitor Channels, C: Field Reporters & Responders) showing **real tweets** (exact text, actual post time) from the 242-handle India X master database via TwtAPI, filtered by editorial guardrails. Refresh is **manual-only** (`𝕏 Refresh tweets` button) to respect the monthly API budget: each refresh spends one Search call per column (~3 total) covering the top-trust handles, and the header shows the remaining monthly calls after every refresh. If the API is unavailable the columns stay quiet — the desk never shows fabricated content. (`X_PROVIDER=sim` in `.env` switches back to the clearly-labelled simulated demo feed, which is auto-purged whenever real mode is active.)
-- **X Conversation Broker**: every 60s aggregates term volume across scraped tweets; a >150% spike in a rolling 5-minute window matching an active headline fires a *Viral Acceleration Event*, injecting a dynamic offset into that story's Search Trend Momentum score (capped at the variable's 15 points) and showing a "trending on X" chip on the story card. Surges past 5,000 posts/hour override low-confidence holds and elevate to a *High-Demand Airtime Recommendation*.
+Every story pack has a **Write with AI** panel with three one-click formats — **Web article**, **Broadcast script**, **Social copy** (X thread + Instagram + Facebook). Drafts are strictly grounded: the writer is instructed (and, for the mock path, mechanically restricted) to use only facts already present in the story pack — sources, evidence lines, and related tweets — never inventing quotes, names, or numbers. Every draft is labeled for human review before use, and previous drafts stay listed on the pack for quick reuse.
 
-Built from the specification documents in `AI Newsroom 3` (Master Prompt, Newsroom Dashboard MVP PRD, X Intelligence Dashboard spec, X Monitoring Guardrails, India X master database).
+- **With an Anthropic API key** (set in **Ops → AI writer settings**, along with your channel name, voice description, and optional sample articles for style-matching): drafts are generated live by Claude in your channel's voice and stored with token counts, shown with an amber **AI DRAFT — review before use** badge.
+- **Without a key**: the same buttons still work — the backend falls back to `app/news/mock_writer.py`, which assembles an instant, clearly-labeled **`[MOCK DRAFT]`** template purely from story-pack data (headline options, bulleted evidence, verbatim tweet quotes, hashtags derived from the headline). Shown with a blue **MOCK DRAFT — template output** badge, so the pick → pack → write flow never dead-ends waiting on a key.
+
+## Live rival-TV monitor
+
+Polls six rival channels' YouTube "uploads" RSS feeds (`data/live_channels.json`: NDTV 24x7, India Today, Times Now, Republic TV, CNN-News18, WION) every `LIVE_POLL_MINUTES` (default 5). Two effects:
+
+1. Board stories a rival is already airing get an on-air chip (`📺 On air: <channel>`) so the producer knows the competition is on it.
+2. Topics rivals are covering that our board is *missing* become priority discovery keywords (origin `live-tv`) for the next ingest cycle — turning the competition into a lead generator. Keyword extraction is hardened against TV-noise words, filler/preposition tokens, and date/weekday tokens so only genuine story signal reaches discovery.
+
+Status (last poll time, channels covered, clips in window, recent titles/errors) is visible on the Ops page.
+
+## Top 5 signals, flash alerts, and the pick workflow
+
+- **Top 5 signals**: the X desk surfaces the five posts most needing editorial attention, ranked from the same guardrail metrics that drive the story board — never an arbitrary/separate ranking.
+- **Flash alerts**: a red **FLASH · BREAKING** strip for new high-score breaking stories and a blue **VIRAL ON X** strip for viral-acceleration events slide down over any page, badge the Alerts nav item, and jump straight to the story card on click.
+- **Pick → My Picks**: picking a story is optimistic (the card moves immediately) and confirmed by a bottom-center toast with an **Undo** action; a successful pick also kicks off a background board refresh so the next-best candidates backfill the space it left.
 
 ## Setup
 
@@ -23,6 +40,14 @@ pip install -r requirements.txt
 copy .env.example .env       # then edit .env
 python run.py                # http://127.0.0.1:8000
 ```
+
+Static JS is served with a build-time cache-busting version stamp (`?v=<mtime>`) appended to every local script tag, so an edited/deployed `static/js/*.js` is always fetched fresh — no more "button does nothing" from a stale cached script.
+
+### AI writer key (optional)
+
+1. Get an API key from the [Anthropic Console](https://console.anthropic.com).
+2. In the app, go to **Ops Desk → AI writer settings**, paste the key, and optionally set your channel name, voice description, and sample articles.
+3. Without a key, the writer still works — see **AI article writer** above for the mock-draft fallback.
 
 ### Email briefs (optional)
 
@@ -55,35 +80,44 @@ python scripts/import_handles.py "path\to\india_x_master_database_1.xlsx"
 | `POST /api/x/refresh` | Fetch real tweets (~3 API calls), then chain a free story re-rank |
 | `POST /api/stories/{id}/pick` | Toggle a story's picked state |
 | `GET /api/stories/{id}/pack` | Story pack: sources, evidence, related tweets, format suggestions |
+| `POST /api/stories/{id}/write?format=web\|broadcast\|social` | Generate an AI (or mock, if no key) draft and store it |
+| `GET /api/stories/{id}/articles` | Previously generated drafts for a story |
+| `GET /api/settings` / `POST /api/settings` | AI writer settings (channel voice, model, API key, `key_configured`) |
 | `POST /api/brief` | Generate (and send, if enabled) a brief now |
 | `POST /api/settings/news-refresh?minutes=N` | Set the auto-refresh interval (0 = hourly only) |
-| `GET /api/ops` | Ops summary: last cycle stats, budget, guardrail audit |
+| `GET /api/ops` | Ops summary: last cycle stats, budget, guardrail audit, live-monitor status |
 | `GET /api/rundown` | Ranked stories + score breakdowns (JSON) |
 | `GET /api/velocity` | Recent velocity events |
+| `GET /api/x/top-signals` | Top 5 X posts needing editorial attention |
 | `POST /api/sim/spike` | Demo viral spike (only with `X_PROVIDER=sim`) |
 
-Every action is also available from the UI (Story desk and Ops pages).
+Every action is also available from the UI (Story Desk, X Desk, and Ops pages).
 
 ## Architecture
 
 ```
 Google News RSS ──▶ ingest ─▶ enrich ─▶ 100-pt scoring ─▶ guardrails ─▶ SQLite ─▶ SSE ─▶ UI (top)
-                                              ▲                                        
-                                   +1..+10 trend offset                               
-                                              │                                        
+                                              ▲                                        ▲
+                                   +1..+10 trend offset                    rival-TV on-air chips
+                                              │                                        │
 X provider chain ─▶ dedup ─▶ X guardrails ─▶ broker (60s velocity ticks) ─▶ SSE ─▶ UI (bottom)
-(sim today; twscrape → Nitter → Playwright stubs in app/x/stubs.py)
+(twtapi today; twscrape → Nitter → Playwright stubs in app/x/stubs.py)
+
+Rival YouTube feeds ─▶ live_monitor (poll every 5 min) ─▶ on-air match + missed-topic keywords ─▶ ingest
 ```
 
 - **Backend**: FastAPI + APScheduler + SQLite (WAL), SSE at `/api/stream` (typed events: `rundown`, `tweet`, `velocity_event`, `system_status`).
-- **Frontend**: `static/index.html` + vanilla JS modules, Tailwind (CDN), colors per spec (`#0F1419` bg, `#E02424` breaking, `#D97706` developing, `#059669` verified).
-- **Scoring** (`app/news/scoring.py`): Breaking 15 · Emotion 15 · Political 12 · Celebrity 10 · Economy 12 · Safety 15 · Visual 8 · Novelty 8 · Trend 15. Every scorer returns `(points, evidence[])`; the UI evidence expander and the email brief show the exact matched strings, so every point is programmatically traceable.
-- **X feed**: the `XProvider` interface (`app/x/provider.py`) is the plug-in seam. Today `SimulatedProvider` generates realistic traffic from the real handle DB (keyed to live headlines so broker matching genuinely fires). The zero-API scraping tiers from the spec are documented stubs in `app/x/stubs.py`.
+- **Frontend**: `static/index.html` + vanilla JS modules (`app`, `story_desk`, `x_desk`, `ops`, `views`, `stream`), Tailwind (CDN), colors per spec (navy sidebar `#0B1526`, `#D92D20` breaking, `#F79009` developing, `#079455` verified).
+- **Scoring** (`app/news/scoring.py`): Breaking 15 · Emotion 15 · Political 12 · Celebrity 10 · Economy 12 · Safety 15 · Visual 8 · Novelty 8 · Trend 15. Every scorer returns `(points, evidence[])`; the story pack's evidence trail and the email brief show the exact matched strings, so every point is programmatically traceable.
+- **X feed**: the `XProvider` interface (`app/x/provider.py`) is the plug-in seam; TwtAPI is the default real-tweet provider, `SimulatedProvider` a demo fallback keyed to live headlines. Zero-API scraping tiers from the spec are documented stubs in `app/x/stubs.py`.
+- **AI writer** (`app/news/writer.py` + `app/news/mock_writer.py`): shared story-pack grounding for both the live Anthropic path and the key-free mock fallback; both paths store every draft (success or mock) in the `articles` table.
+- **Live monitor** (`app/news/live_monitor.py`): key-free YouTube RSS polling of six rival channels' upload feeds, with noise/filler/date-token filtering before anything becomes a discovery keyword.
+
+Built from the specification documents in `AI Newsroom 3` (Master Prompt, Newsroom Dashboard MVP PRD, X Intelligence Dashboard spec, X Monitoring Guardrails, India X master database).
 
 ## Next steps (per the specs, not yet wired)
 
 - Real scraping layers: twscrape account pool, self-hosted Nitter/RSS bridges, Playwright automation (+proxy rotation/backoff — skeletons and notes in `app/x/stubs.py`).
 - Google Trends-backed Search Trend Momentum baseline.
-- Omnichannel per-platform format suggestions (PRD §5).
 - Handle verification pass for the spreadsheet's unverified ("black text") rows.
 - Auth / multi-user / deployment hardening.

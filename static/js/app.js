@@ -98,6 +98,47 @@ function setUpdated(text) {
   if (el) el.textContent = text;
 }
 
+// Toast: small bottom-center pill for lightweight action feedback (pick/undo).
+// Only one toast at a time — showing a new one replaces whatever is up.
+const Toast = (() => {
+  let el = null;
+  let timer = null;
+
+  function ensure() {
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.className = 'fade-up fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-navy text-white rounded-xl px-4 py-2.5 text-[13px] shadow-lg hidden';
+    document.body.appendChild(el);
+    return el;
+  }
+
+  function show(message, opts = {}) {
+    const { actionLabel, onAction, ms = 5000 } = opts;
+    const node = ensure();
+    clearTimeout(timer);
+    node.innerHTML = `<span>${esc(message)}</span>` +
+      (actionLabel ? `<button class="ml-3 underline font-semibold hover:text-white/80">${esc(actionLabel)}</button>` : '');
+    node.classList.remove('hidden');
+    node.classList.add('flex', 'items-center');
+    node.style.animation = 'none';
+    void node.offsetHeight;
+    node.style.animation = '';
+    if (actionLabel && typeof onAction === 'function') {
+      const btn = node.querySelector('button');
+      if (btn) btn.onclick = () => { hide(); onAction(); };
+    }
+    timer = setTimeout(hide, ms);
+  }
+
+  function hide() {
+    if (el) { el.classList.add('hidden'); el.classList.remove('flex', 'items-center'); }
+    clearTimeout(timer);
+  }
+
+  return { show, hide };
+})();
+
 (function clock() {
   const el = document.getElementById('clock');
   function tick() {

@@ -193,6 +193,11 @@ const StoryDesk = (() => {
     if (s) { s.picked = s.picked ? 0 : 1; render(); }
     const r = await api(`/api/stories/${id}/pick`);
     if (r.refreshing) { setUpdated('story picked — refreshing…'); setLive('busy'); }
+    if (r.picked === true) {
+      Toast.show('Story moved to My Picks', { actionLabel: 'Undo', onAction: () => StoryDesk.pick(id) });
+    } else if (r.picked === false) {
+      Toast.show('Story returned to the board');
+    }
   }
 
   function pickTop() {
@@ -313,10 +318,14 @@ const StoryDesk = (() => {
 
   function draftCard(a, isPrevious) {
     const meta = `${esc(a.format)} · ${esc(a.model || '')} · ${ageLabel(a.created_at)}`;
+    const isMock = a.model === 'mock';
+    const badge = isMock
+      ? '<span class="bg-blue1 text-blue8 font-semibold text-[11px] px-2 py-0.5 rounded-md">MOCK DRAFT — template output</span>'
+      : '<span class="bg-amber1 text-amber8 font-semibold text-[11px] px-2 py-0.5 rounded-md">AI DRAFT — review before use</span>';
     return `
       <div class="border border-line rounded-xl p-3">
         <div class="flex items-center gap-2 mb-1.5">
-          <span class="bg-amber1 text-amber8 font-semibold text-[11px] px-2 py-0.5 rounded-md">AI DRAFT — review before use</span>
+          ${badge}
           <button onclick="StoryDesk.copyDraft(event)" class="ml-auto text-[12px] text-blue6 hover:underline">Copy</button>
         </div>
         <p class="text-[11.5px] text-sub mb-2">${meta}</p>
@@ -325,14 +334,12 @@ const StoryDesk = (() => {
   }
 
   async function loadWriterState(id) {
-    const buttons = document.querySelectorAll('#ai-write-buttons .ai-write-btn');
     const status = document.getElementById('ai-write-status');
     const out = document.getElementById('ai-write-output');
     let settings = {};
     try { settings = await (await fetch('/api/settings')).json(); } catch {}
-    if (!settings.key_configured) {
-      buttons.forEach(b => { b.disabled = true; b.classList.add('opacity-50', 'cursor-not-allowed'); });
-      if (status) status.innerHTML = 'Add your Anthropic API key in Ops → AI writer settings to enable drafting.';
+    if (!settings.key_configured && status) {
+      status.innerHTML = 'No API key configured — drafts will be instant template mocks. Add a key in Ops → AI writer settings for channel-voice AI drafts.';
     }
     let drafts = [];
     try { drafts = await (await fetch(`/api/stories/${id}/articles`)).json(); } catch {}
@@ -347,7 +354,7 @@ const StoryDesk = (() => {
     const status = document.getElementById('ai-write-status');
     const out = document.getElementById('ai-write-output');
     buttons.forEach(b => { b.disabled = true; b.classList.add('opacity-50', 'cursor-not-allowed'); });
-    if (status) { status.classList.remove('text-red6'); status.classList.add('text-sub'); status.textContent = 'Writing draft… this can take a minute or two.'; }
+    if (status) { status.classList.remove('text-red6'); status.classList.add('text-sub'); status.textContent = 'Preparing draft…'; }
     let r;
     try {
       const res = await fetch(`/api/stories/${id}/write?format=${fmt}`, { method: 'POST' });

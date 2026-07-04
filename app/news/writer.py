@@ -136,9 +136,24 @@ def generate_article(story_id: int, fmt: str) -> dict:
     key = settings_store.get_setting("anthropic_api_key", "")
 
     if not key:
-        return {"ok": False,
-                "error": "No Anthropic API key configured. Add it in Ops → AI "
-                         "writer settings."}
+        from app.news.mock_writer import generate_mock
+        content = generate_mock(pack, fmt)
+        created_at = datetime.now(timezone.utc).isoformat()
+        article_id = _store_article(story_id, fmt, content, "mock", created_at,
+                                    None, None, None)
+        return {
+            "ok": True,
+            "article": {
+                "id": article_id,
+                "story_id": story_id,
+                "format": fmt,
+                "content": content,
+                "model": "mock",
+                "created_at": created_at,
+                "input_tokens": None,
+                "output_tokens": None,
+            },
+        }
 
     system_prompt = _build_system_prompt({
         "channel_name": channel_name,
