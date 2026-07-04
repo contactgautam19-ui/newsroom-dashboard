@@ -42,6 +42,9 @@ async def lifespan(app: FastAPI):
         empty = con.execute("SELECT COUNT(*) c FROM stories").fetchone()["c"] == 0
     if empty:
         asyncio.get_running_loop().run_in_executor(None, ingest.run_ingest_cycle)
+    # warm the live rival-TV monitor so chips/keywords are ready at startup
+    from app.news import live_monitor
+    asyncio.get_running_loop().run_in_executor(None, live_monitor.run_live_cycle)
     yield
     scheduler.shutdown()
 
@@ -222,6 +225,7 @@ def save_settings(payload: dict = Body(...)):
 @app.get("/api/ops")
 def ops_summary():
     from app.news.sources import load_sources
+    from app.news import live_monitor
     with db.connect() as con:
         briefs_today = con.execute(
             "SELECT COUNT(*) c FROM briefings WHERE created_at >= date('now')"
@@ -239,6 +243,7 @@ def ops_summary():
         "sources_total": len(load_sources(active_only=False)),
         "x_budget": pipeline.twtapi.last_status,
         "discarded_recent": discarded,
+        "live_monitor": live_monitor.LAST_POLL,
     }
 
 

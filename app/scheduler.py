@@ -41,6 +41,13 @@ def x_poll_job() -> None:
     pipeline.poll()
 
 
+def live_job() -> None:
+    if not in_active_window():
+        return
+    from app.news import live_monitor
+    live_monitor.run_live_cycle()
+
+
 def broker_job() -> None:
     broker.run_broker_tick()
 
@@ -84,6 +91,8 @@ def start() -> None:
         scheduler.add_job(x_poll_job, "interval", seconds=5, id="x_poll")
     scheduler.add_job(broker_job, "interval",
                       seconds=config.BROKER_TICK_SECONDS, id="broker_tick")
+    scheduler.add_job(live_job, "interval",
+                      minutes=config.LIVE_POLL_MINUTES, id="live_monitor")
     scheduler.add_job(briefing_job, "cron", minute=58, id="hourly_brief")
     scheduler.start()
 

@@ -74,3 +74,9 @@ FALLBACK_COOLDOWN_SECONDS = 300           # 5-minute re-ingest cooldown
 REPETITIVE_DECAY_PER_HOUR = 3             # points lost per stale hour
 REPETITIVE_DECAY_CAP = 15                 # decay never exceeds this
 NEWS_REFRESH_MINUTES = _int("NEWS_REFRESH_MINUTES", 10)  # auto story refresh (0 = hourly only)
+
+# Live rival-TV coverage monitor: rival channels' YouTube uploads feeds mirror
+# their on-air rundown within minutes, so polling them flags what rivals are
+# airing and surfaces topics our board is missing as priority keywords.
+LIVE_POLL_MINUTES = _int("LIVE_POLL_MINUTES", 5)
+LIVE_WINDOW_HOURS = _int("LIVE_WINDOW_HOURS", 3)

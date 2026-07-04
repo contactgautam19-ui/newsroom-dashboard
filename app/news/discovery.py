@@ -79,11 +79,19 @@ def google_trends_terms(limit: int = 10) -> list[dict]:
 
 
 def collect_keywords() -> list[dict]:
-    """Merged keyword list: X desk terms get priority (the editor's signal),
-    but Google Trends keeps reserved slots so genuinely new topics always get
-    searched even when the X desk is noisy. Capped at DISCOVERY_KEYWORDS."""
-    trends_slots = max(2, config.DISCOVERY_KEYWORDS // 2)
-    x_slots = config.DISCOVERY_KEYWORDS - trends_slots
+    """Merged keyword list from three live pools with reserved slots (capped at
+    DISCOVERY_KEYWORDS):
+
+    - live-tv (up to 3): topics rival channels are airing that our board is
+      missing — the strongest freshness signal, taken first;
+    - x-desk (up to 3): hot terms from the monitored X accounts;
+    - google-trends (up to 2): real-time trending searches.
+
+    Any unused slots are backfilled from the pools in that same priority order.
+    """
+    from app.news.live_monitor import live_hot_terms  # lazy: avoid import cycle
+
+    live_slots, x_slots, trends_slots = 3, 3, 2
 
     seen: set[str] = set()
     merged: list[dict] = []
@@ -99,11 +107,15 @@ def collect_keywords() -> list[dict]:
             merged.append(kw)
             count -= 1
 
+    live_terms = live_hot_terms()
     x_terms = x_desk_hot_terms()
     trend_terms = google_trends_terms()
+    take(live_terms, live_slots)
     take(x_terms, x_slots)
     take(trend_terms, trends_slots)
-    take(x_terms + trend_terms, config.DISCOVERY_KEYWORDS - len(merged))  # backfill
+    # backfill remaining capacity in priority order
+    take(live_terms + x_terms + trend_terms,
+         config.DISCOVERY_KEYWORDS - len(merged))
     return merged
 
 

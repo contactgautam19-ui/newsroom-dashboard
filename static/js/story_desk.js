@@ -40,6 +40,9 @@ const StoryDesk = (() => {
     const srcs = (s.sources || []).length;
     if (srcs > 1) parts.push(`Corroborated by ${srcs} outlets`);
     else if (s.needs_review) parts.push('Single source — verify before air');
+    if (Array.isArray(s.rival_coverage) && s.rival_coverage.length) {
+      parts.unshift(`Rivals airing this now (${s.rival_coverage.join(' & ')})`);
+    }
     return parts.join('  ·  ');
   }
 
@@ -60,6 +63,7 @@ const StoryDesk = (() => {
           <span class="px-2.5 py-0.5 rounded-md font-semibold ${st.bg} ${st.text}">${st.label}</span>
           ${s.needs_review ? '<span class="px-2.5 py-0.5 rounded-md font-semibold bg-amber1 text-amber8">Needs Review</span>' : ''}
           ${s.high_demand ? '<span class="px-2.5 py-0.5 rounded-md font-semibold bg-red1 text-red8">High Demand</span>' : ''}
+          ${Array.isArray(s.rival_coverage) && s.rival_coverage.length ? `<span class="px-2.5 py-0.5 rounded-md font-semibold bg-red1 text-red8">📺 On air: ${esc(s.rival_coverage.join(', '))}</span>` : ''}
           <span class="font-medium ${ageColor}">${ageLabel(s.published_at)}</span>
         </div>
         <h3 class="text-[16.5px] font-bold leading-snug mb-1">

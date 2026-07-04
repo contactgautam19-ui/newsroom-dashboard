@@ -105,6 +105,15 @@ CREATE TABLE IF NOT EXISTS articles (
     output_tokens INTEGER,
     error TEXT
 );
+
+CREATE TABLE IF NOT EXISTS live_coverage (
+    video_id TEXT PRIMARY KEY,
+    channel TEXT NOT NULL,
+    title TEXT NOT NULL,
+    published_at TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    terms TEXT NOT NULL DEFAULT '[]'           -- significant tokens for board matching
+);
 """
 
 
@@ -130,6 +139,8 @@ MIGRATIONS = [
     "ALTER TABLE stories ADD COLUMN last_aged_at TEXT",
     # poster profile image for the Top 5 signals cards
     "ALTER TABLE tweets ADD COLUMN avatar_url TEXT",
+    # live rival-TV monitor (2026-07): channel names currently airing this story
+    "ALTER TABLE stories ADD COLUMN rival_coverage TEXT",
 ]
 
 
@@ -145,7 +156,7 @@ def init_db() -> None:
 
 def row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     d = dict(row)
-    for key in ("flags", "media", "sources", "terms", "evidence"):
+    for key in ("flags", "media", "sources", "terms", "evidence", "rival_coverage"):
         if key in d and isinstance(d[key], str):
             try:
                 d[key] = json.loads(d[key])

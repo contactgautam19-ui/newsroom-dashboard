@@ -35,6 +35,23 @@ const Ops = (() => {
           <p class="text-[11.5px]">↳ ${esc(t.discard_reason || '')}</p>
         </div>`).join('') || '<p>Nothing filtered recently.</p>';
 
+    const liveEl = document.getElementById('ops-live');
+    if (liveEl) {
+      const lm = d.live_monitor || {};
+      if (!lm.at) {
+        liveEl.innerHTML = '<p>Waiting for first poll…</p>';
+      } else {
+        const titles = (lm.recent_titles || []).map(t =>
+          `<li class="flex gap-2"><span class="text-sub">•</span><span>${esc(t)}</span></li>`).join('');
+        const errs = (lm.errors || []).length
+          ? `<p class="text-red6">${(lm.errors || []).map(esc).join(' · ')}</p>` : '';
+        liveEl.innerHTML = `
+          <p>Polled ${ageLabel(lm.at)} · ${lm.channels ?? 0} channels · ${lm.clips_in_window ?? 0} clips in the last 3 h</p>
+          ${titles ? `<ul class="space-y-1 mt-1">${titles}</ul>` : '<p>No clips in the window yet.</p>'}
+          ${errs}`;
+      }
+    }
+
     const sel = document.getElementById('news-interval');
     sel.value = String(d.news_refresh_minutes ?? 10);
 
