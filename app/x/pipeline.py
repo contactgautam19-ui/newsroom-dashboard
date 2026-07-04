@@ -45,7 +45,7 @@ class XPipeline:
                                    {"purged_simulated_tweets": purged})
             rows = con.execute("SELECT * FROM handles").fetchall()
             self._handles = db.rows_to_dicts(rows)
-            for r in con.execute("SELECT id FROM tweets ORDER BY rowid DESC LIMIT 5000"):
+            for r in con.execute("SELECT id FROM tweets ORDER BY created_at DESC LIMIT 5000"):
                 self._seen_ids.add(r["id"])
 
     def poll(self) -> list[Tweet]:
