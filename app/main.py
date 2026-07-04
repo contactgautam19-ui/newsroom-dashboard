@@ -333,7 +333,7 @@ def get_settings():
 def save_settings(payload: dict = Body(...)):
     from app import settings_store
     for key in ("channel_name", "voice_description", "sample_articles",
-                "writer_model"):
+                "writer_model", "brief_recipients"):
         if key in payload and payload[key] is not None:
             settings_store.set_setting(key, str(payload[key]))
     api_key = payload.get("anthropic_api_key")

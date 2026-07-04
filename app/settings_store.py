@@ -2,13 +2,15 @@
 table. The API key is never returned in the clear — get_public_settings masks
 it so the Ops UI can show it is configured without leaking the secret."""
 
-from app import db
+import re
+
+from app import config, db
 
 WRITER_MODEL_DEFAULT = "claude-opus-4-8"
 
 # keys surfaced to the writer + Ops UI (the api key is masked on the way out)
 _KEYS = ("channel_name", "voice_description", "sample_articles",
-         "writer_model", "anthropic_api_key")
+         "writer_model", "anthropic_api_key", "brief_recipients")
 
 
 def get_setting(key: str, default=None):
@@ -39,4 +41,21 @@ def get_public_settings() -> dict:
         "sample_articles": get_setting("sample_articles", ""),
         "writer_model": get_setting("writer_model", WRITER_MODEL_DEFAULT),
         "anthropic_api_key": _mask_key(get_setting("anthropic_api_key", "")),
+        "brief_recipients": get_setting("brief_recipients", ""),
     }
+
+
+def get_recipients() -> list[str]:
+    """Hourly brief recipient list: DB-backed 'brief_recipients' setting
+    (comma/space/newline-separated), falling back to config.BRIEF_RECIPIENT
+    when unset or empty."""
+    raw = get_setting("brief_recipients", "") or ""
+    parts = re.split(r"[,\s]+", raw.strip())
+    seen: list[str] = []
+    for p in parts:
+        p = p.strip()
+        if p and "@" in p and p not in seen:
+            seen.append(p)
+    if seen:
+        return seen
+    return [config.BRIEF_RECIPIENT] if config.BRIEF_RECIPIENT else []

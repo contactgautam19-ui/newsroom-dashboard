@@ -42,6 +42,7 @@ GMAIL_ADDRESS = os.getenv("GMAIL_ADDRESS", "")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 BRIEF_RECIPIENT = os.getenv("BRIEF_RECIPIENT", "gautam.news9@gmail.com")
 EMAIL_ENABLED = _bool("EMAIL_ENABLED", False)
+APP_URL = os.getenv("APP_URL", "https://newsroom-dashboard-three.vercel.app")
 
 ACTIVE_WINDOW_START = _int("ACTIVE_WINDOW_START", 6)   # 6:00 AM
 ACTIVE_WINDOW_END = _int("ACTIVE_WINDOW_END", 21)      # 9:00 PM

@@ -94,6 +94,11 @@ const Ops = (() => {
           <input id="ws-key" type="password" class="${INPUT}" placeholder="${keyPlaceholder}">
         </div>
         <div>
+          <label class="block font-semibold mb-1">Email brief recipients</label>
+          <textarea id="ws-recipients" rows="2" class="${INPUT}" placeholder="editor@channel.com, lead@channel.com">${esc(s.brief_recipients || '')}</textarea>
+          <p class="text-[11.5px] text-sub mt-1">Comma-separated. Hourly top-stories email goes to these addresses.</p>
+        </div>
+        <div>
           <button id="ws-save" onclick="Ops.saveSettings(this)" class="px-4 py-2 rounded-xl bg-navy text-white font-semibold hover:bg-navy2">Save settings</button>
         </div>`;
     }
@@ -105,6 +110,7 @@ const Ops = (() => {
         sample_articles: document.getElementById('ws-samples').value,
         writer_model: document.getElementById('ws-model').value,
         anthropic_api_key: document.getElementById('ws-key').value,
+        brief_recipients: document.getElementById('ws-recipients').value,
       };
       btn.textContent = 'Saving…';
       try {
