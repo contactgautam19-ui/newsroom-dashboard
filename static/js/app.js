@@ -169,4 +169,21 @@ window.addEventListener('DOMContentLoaded', () => {
   const initial = location.hash.replace('#', '');
   if (initial && initial !== 'stories') Nav.go(initial);
   else Nav.go('stories');
+  autoRefreshOnOpen();
 });
+
+// Auto-refresh the story board once per page load if the last ingest is
+// missing or stale (>10 min), so the board is fresh the moment the app opens.
+async function autoRefreshOnOpen() {
+  try {
+    const ops = await (await fetch('/api/ops')).json();
+    const last = ops && ops.last_ingest && ops.last_ingest.last_ingest;
+    const staleMs = 10 * 60 * 1000;
+    const isStale = !last || (Date.now() - new Date(last).getTime()) > staleMs;
+    if (isStale) {
+      setLive('busy');
+      setUpdated('refreshing…');
+      await api('/api/ingest');
+    }
+  } catch { /* silent — SSE will still deliver data */ }
+}

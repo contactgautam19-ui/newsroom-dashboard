@@ -163,9 +163,10 @@ tailwind.config = { theme: { extend: {
         <div class="flex items-center gap-3 flex-wrap mb-4">
           <h2 class="text-[17px] font-bold">All Stories</h2>
           <span id="story-count" class="min-w-[24px] h-6 px-1.5 rounded-full bg-blue6 text-white text-[12px] font-semibold flex items-center justify-center">0</span>
-          <button id="refresh-stories" class="flex items-center gap-1.5 text-[13px] text-sub hover:text-ink">
-            <span id="refresh-icon">⟳</span> <span id="refresh-label">Refreshed just now</span>
+          <button id="refresh-stories" class="flex items-center gap-2 bg-navy text-white text-[13px] font-semibold px-4 py-2 rounded-xl hover:bg-navy2">
+            <span id="refresh-icon">⟳</span> Refresh stories
           </button>
+          <span id="refresh-label" class="text-[12.5px] text-sub">Refreshed just now</span>
           <div id="filters" class="flex gap-1.5 flex-wrap"></div>
           <label class="ml-auto flex items-center gap-1.5 text-[13px] text-sub">Sort by
             <select id="sort-by" class="border border-line rounded-lg px-2 py-1.5 bg-white text-ink text-[13px] font-medium">
@@ -187,19 +188,10 @@ tailwind.config = { theme: { extend: {
           <span id="x-note" class="text-[12.5px] text-sub ml-auto"></span>
         </div>
         <div id="top-signals" class="mb-6"></div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div class="bg-white border border-line rounded-2xl p-3">
-            <p class="text-[11px] font-semibold tracking-widest text-green8 uppercase mb-2 px-1">Government &amp; wires</p>
-            <div id="col-A" class="space-y-2 md:max-h-[65vh] md:overflow-y-auto md:pr-1"></div>
-          </div>
-          <div class="bg-white border border-line rounded-2xl p-3">
-            <p class="text-[11px] font-semibold tracking-widest text-amber8 uppercase mb-2 px-1">Rival channels</p>
-            <div id="col-B" class="space-y-2 md:max-h-[65vh] md:overflow-y-auto md:pr-1"></div>
-          </div>
-          <div class="bg-white border border-line rounded-2xl p-3">
-            <p class="text-[11px] font-semibold tracking-widest text-blue8 uppercase mb-2 px-1">Field reporters</p>
-            <div id="col-C" class="space-y-2 md:max-h-[65vh] md:overflow-y-auto md:pr-1"></div>
-          </div>
+        <div class="bg-white border border-line rounded-2xl p-4">
+          <p class="text-[13px] font-bold mb-3">Latest posts</p>
+          <div id="x-filters" class="flex items-center gap-1.5 flex-wrap"></div>
+          <div id="x-feed" class="space-y-2.5 mt-3"></div>
         </div>
       </section>
 
@@ -222,6 +214,11 @@ tailwind.config = { theme: { extend: {
             <button onclick="Ops.briefNow(this)" class="px-3.5 py-2 rounded-xl border border-line bg-white hover:border-ink font-medium">✉ Email brief now</button>
             <a href="/api/briefings/latest" target="_blank" class="px-3.5 py-2 rounded-xl border border-line bg-white hover:border-ink font-medium">View latest brief</a>
           </div>
+        </div>
+        <div class="bg-white border border-line rounded-2xl p-5 mb-4">
+          <p class="text-[13px] font-bold mb-1">AI writer settings</p>
+          <p class="text-[12px] text-sub mb-3">Teach the writer your channel's voice. Drafts are always labeled for editorial review.</p>
+          <div id="writer-settings" class="space-y-3 text-[13px]"></div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="bg-white border border-line rounded-2xl p-5">

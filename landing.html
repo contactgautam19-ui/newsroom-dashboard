@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Newsroom Intelligence — Rank the story before your competitor does</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700;8..60,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#080808; --panel:#0E0E0E; --panel-2:#141414; --line:#262626; --line-soft:#1C1C1C;
+    --text:#F2F2F2; --muted:#9A9A9A; --dim:#6B6B6B;
+    --gold:#F5C518; --gold-2:#FFD84D;
+    --green:#22C55E; --amber:#F59E0B; --red:#E5484D;
+    --radius:14px; --max:1180px;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,Helvetica,sans-serif;
+    --serif:'Source Serif 4',Georgia,'Times New Roman',serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans);
+    line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.word,.st-title{font-family:var(--serif)}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:var(--max);margin:0 auto;padding:0 28px}
+  .mono{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace}
+
+  /* LOGO */
+  .logo{display:flex;align-items:center;gap:16px}
+  .logo svg{display:block}
+  .logo .divider{width:1px;height:26px;background:#3A3A3A}
+  .logo .word{font-weight:800;letter-spacing:.02em;font-size:19px;color:#fff}
+
+  /* NAV */
+  nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(12px);
+      background:rgba(8,8,8,.82);border-bottom:1px solid var(--line-soft)}
+  .nav-in{display:flex;align-items:center;justify-content:space-between;height:78px}
+  .nav-links{display:flex;gap:12px;align-items:center;font-size:14.5px;color:#C9C9C9}
+  .nav-links a:not(.btn){padding:9px 18px;border-radius:999px;border:1px solid #2A2A2A;
+     background:#131313;color:#CFCFCF;font-weight:500;transition:all .18s ease}
+  .nav-links a:not(.btn):hover{color:#fff;border-color:var(--gold);background:#191712}
+  .btn{display:inline-block;padding:13px 24px;border-radius:8px;font-weight:700;font-size:15px;
+       transition:transform .12s ease,background .2s ease,border-color .2s,filter .2s}
+  .btn:hover{transform:translateY(-1px)}
+  .btn-primary{background:var(--red);color:#fff}
+  .btn-primary:hover{filter:brightness(1.08)}
+  .btn-ghost{border:1px solid #3A3A3A;color:#fff}
+  .btn-ghost:hover{border-color:var(--gold)}
+  @media(max-width:780px){.nav-links a:not(.btn){display:none}}
+
+  /* HERO */
+  header{padding:84px 0 46px}
+  .hero-grid{display:grid;grid-template-columns:1.02fr .98fr;gap:56px;align-items:center}
+  @media(max-width:920px){.hero-grid{grid-template-columns:1fr;gap:40px}}
+  .eyebrow{display:inline-flex;align-items:center;gap:10px;font-size:12.5px;letter-spacing:.16em;
+     text-transform:uppercase;color:var(--gold);border:1px solid #3A3520;
+     background:rgba(245,197,24,.05);padding:9px 16px;border-radius:999px;margin-bottom:30px;font-weight:600}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--gold);
+      box-shadow:0 0 0 0 rgba(245,197,24,.6);animation:pulse 1.9s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(245,197,24,.5)}70%{box-shadow:0 0 0 9px rgba(245,197,24,0)}100%{box-shadow:0 0 0 0 rgba(245,197,24,0)}}
+  h1{font-size:clamp(40px,6vw,70px);line-height:1.04;font-weight:700;letter-spacing:-.015em;color:#fff}
+  h1 .accent{color:var(--gold)}
+  .sub{margin-top:26px;font-size:clamp(17px,2vw,21px);color:var(--muted);max-width:600px;line-height:1.55}
+  .cta-row{margin-top:36px;display:flex;gap:16px;flex-wrap:wrap}
+  .trust{display:inline-block;margin-top:30px;font-size:14px;color:var(--muted);max-width:600px;
+     background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 20px;line-height:1.5}
+
+  /* BOARD MOCK */
+  .board{background:var(--panel);border:1px solid rgba(153,246,228,.45);border-radius:16px;
+     overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 1px rgba(153,246,228,.08),0 0 40px rgba(94,234,212,.08)}
+  .board-head{display:flex;align-items:center;justify-content:space-between;
+     padding:18px 22px;border-bottom:1px solid var(--line-soft)}
+  .board-head .t{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:#B5B5B5;font-weight:600}
+  .dots{display:flex;gap:8px}.dots span{width:11px;height:11px;border-radius:50%}
+  .board-body{padding:10px 22px 6px}
+  .story{padding:20px 0 20px 18px;border-left:3px solid var(--gold);
+     display:grid;grid-template-columns:1fr auto;gap:14px;
+     border-bottom:1px solid var(--line-soft);animation:rise .5s ease both}
+  .story:nth-child(2){animation-delay:.08s}.story:nth-child(3){animation-delay:.16s}
+  @keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .story.verified{border-left-color:var(--green)}
+  .story.developing{border-left-color:var(--amber)}
+  .st-meta{font-size:12.5px;color:#8F8F8F;margin-bottom:9px}
+  .tag{font-weight:800;letter-spacing:.02em}.tag.b{color:var(--red)}.tag.v{color:var(--green)}.tag.d{color:var(--amber)}
+  .flair{color:var(--gold);font-weight:800}
+  .flair.red{color:var(--red)}
+  .st-title{font-size:20px;font-weight:700;color:#fff;line-height:1.28;letter-spacing:-.01em}
+  .st-src{font-size:12.5px;color:#7A7A7A;margin-top:11px}
+  .score{font-size:34px;font-weight:800;color:var(--gold);text-align:right;line-height:1;white-space:nowrap}
+  .score small{font-size:13px;color:#8F8F8F;font-weight:600}
+  .boost{font-size:13px;color:var(--gold);text-align:right;margin-top:8px;white-space:nowrap}
+  .ticker{border-top:1px dashed var(--line);padding:16px 22px;font-size:13px;
+     color:#9A9A9A;display:flex;gap:12px;align-items:center}
+  .ticker .k{color:var(--gold);font-weight:700}
+
+  /* SECTIONS */
+  section{padding:52px 0;border-top:1px solid var(--line-soft)}
+  .kicker{font-size:12.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--gold);font-weight:700}
+  h2{font-size:clamp(28px,3.8vw,44px);font-weight:700;letter-spacing:-.015em;margin:0 0 14px;color:#fff}
+  .lead{color:var(--muted);max-width:700px;font-size:18px}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;margin-top:8px}
+  @media(max-width:720px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:26px}
+  .stat .n{font-size:38px;font-weight:800;color:#fff}
+  .stat .l{font-size:13.5px;color:var(--muted);margin-top:6px}
+
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:40px}
+  @media(max-width:900px){.cards{grid-template-columns:1fr 1fr}}
+  @media(max-width:620px){.cards{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+     padding:28px;transition:border-color .2s,transform .2s}
+  .card:hover{border-color:var(--gold);transform:translateY(-3px)}
+  .card .ic{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;
+     background:rgba(245,197,24,.1);color:var(--gold);font-size:22px;margin-bottom:16px}
+  .card h3{font-size:18px;margin-bottom:9px;color:#fff}
+  .card p{font-size:14.5px;color:var(--muted)}
+
+  /* SCORING */
+  .score-wrap{display:grid;grid-template-columns:1fr 1fr;gap:52px;align-items:center}
+  @media(max-width:900px){.score-wrap{grid-template-columns:1fr}}
+  .bars{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:28px}
+  .bar{margin-bottom:15px}
+  .bar-top{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:7px}
+  .bar-top .p{color:var(--dim)}
+  .track{height:8px;background:#1E1E1E;border-radius:99px;overflow:hidden}
+  .fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--gold-2))}
+  .fill.c1{background:linear-gradient(90deg,#E5484D,#FF7A6B)}   /* breaking - red */
+  .fill.c2{background:linear-gradient(90deg,#F97316,#FDBA74)}   /* emotion - orange */
+  .fill.c3{background:linear-gradient(90deg,#F5C518,#FFE066)}   /* safety - gold */
+  .fill.c4{background:linear-gradient(90deg,#06B6D4,#67E8F9)}   /* trend - cyan */
+  .fill.c5{background:linear-gradient(90deg,#8B5CF6,#C4B5FD)}   /* political - violet */
+  .fill.c6{background:linear-gradient(90deg,#22C55E,#86EFAC)}   /* economy - green */
+  .fill.c7{background:linear-gradient(90deg,#EC4899,#F9A8D4)}   /* celebrity - pink */
+  .fill.c8{background:linear-gradient(90deg,#14B8A6,#5EEAD4)}   /* visual - teal */
+  .fill.c9{background:linear-gradient(90deg,#6366F1,#A5B4FC)}   /* novelty - indigo */
+  .total{display:flex;justify-content:space-between;align-items:baseline;margin-top:20px;
+     padding-top:18px;border-top:1px solid var(--line)}
+  .total .big{font-size:32px;font-weight:800;color:var(--gold)}
+
+  /* WORKFLOW */
+  .flow{display:grid;grid-template-columns:repeat(5,1fr);gap:0;margin-top:44px}
+  @media(max-width:900px){.flow{grid-template-columns:1fr;gap:14px}}
+  .step{padding:26px 22px;position:relative;border:1px solid var(--line);background:var(--panel)}
+  .flow .step:first-child{border-radius:var(--radius) 0 0 var(--radius)}
+  .flow .step:last-child{border-radius:0 var(--radius) var(--radius) 0}
+  @media(max-width:900px){.flow .step{border-radius:var(--radius)!important}}
+  .step .num{font-size:12.5px;font-weight:800;color:var(--gold);letter-spacing:.12em}
+  .step h4{font-size:16px;margin:10px 0 7px;color:#fff}
+  .step p{font-size:13.5px;color:var(--muted)}
+
+  /* CONTROL */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:52px;align-items:center}
+  @media(max-width:900px){.split{grid-template-columns:1fr}}
+  .checklist{list-style:none}
+  .checklist li{display:flex;gap:14px;padding:15px 0;border-bottom:1px solid var(--line-soft);font-size:15.5px}
+  .checklist li:last-child{border-bottom:0}
+  .check{color:var(--gold);font-weight:800;flex:0 0 auto}
+  .brief-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:26px}
+  .brief-card .bh{font-size:13.5px;color:var(--muted);border-bottom:1px solid var(--line);
+     padding-bottom:14px;margin-bottom:14px;font-weight:600}
+  .brief-row{display:flex;gap:12px;align-items:flex-start;padding:11px 0;font-size:14px}
+  .pill{font-size:10.5px;font-weight:800;padding:4px 10px;border-radius:99px;flex:0 0 auto;letter-spacing:.04em}
+  .pill.b{background:rgba(245,197,24,.15);color:var(--gold)}
+  .pill.v{background:rgba(34,197,94,.15);color:var(--green)}
+  .pill.d{background:rgba(245,158,11,.15);color:var(--amber)}
+
+  /* CTA */
+  .cta{background:linear-gradient(135deg,#151203,#0C0C0C);
+     border:1px solid #2E2A16;border-radius:22px;padding:64px 44px;text-align:center}
+  .cta h2{margin-bottom:14px}
+  .cta p{color:var(--muted);max-width:580px;margin:0 auto 30px;font-size:18px}
+
+  footer{border-top:1px solid var(--line-soft);padding:40px 0;color:var(--dim);font-size:13.5px}
+  .foot-in{display:flex;justify-content:space-between;flex-wrap:wrap;gap:16px;align-items:center}
+</style>
+</head>
+<body>
+
+<!-- reusable logo mark -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="mark" viewBox="0 0 40 40">
+    <circle cx="20" cy="20" r="19" fill="#F5C518"/>
+    <circle cx="27" cy="20" r="12.6" fill="#080808"/>
+    <circle cx="16.5" cy="20" r="3.1" fill="#F5C518"/>
+  </symbol>
+</defs></svg>
+
+<nav>
+  <div class="wrap nav-in">
+    <div class="logo">
+      <svg width="42" height="42"><use href="#mark"/></svg>
+      <span class="divider"></span>
+      <span class="word">NEWSROOM&nbsp;INTELLIGENCE</span>
+    </div>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#scoring">Ranking</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#control">Editorial control</a>
+      <a href="#demo" class="btn btn-primary">Request a demo</a>
+    </div>
+  </div>
+</nav>
+
+<header>
+  <div class="wrap hero-grid">
+    <div>
+      <h1>Rank the story <span class="accent">before</span> your competitor breaks it.</h1>
+      <p class="sub">A live intelligence desk that ingests wires, Google News and X in real time, scores every story on a transparent 100-point framework, and hands your editors a ranked rundown — with the evidence behind every number.</p>
+      <div class="cta-row">
+        <a href="#demo" class="btn btn-primary">Request a demo</a>
+        <a href="#scoring" class="btn btn-ghost">See how ranking works</a>
+      </div>
+      <p class="trust">Advisory-only by design · Human editors keep final rundown control · Built for fast-moving TV &amp; digital desks</p>
+    </div>
+
+    <div class="board" aria-hidden="true">
+      <div class="board-head">
+        <span class="t">Live Rundown</span>
+        <div class="dots"><span style="background:var(--red)"></span><span style="background:var(--amber)"></span><span style="background:var(--green)"></span></div>
+      </div>
+      <div class="board-body">
+        <div class="story">
+          <div>
+            <div class="st-meta">#1 · <span class="tag b">BREAKING</span> · National · Delhi · <span class="flair red">HIGH-DEMAND AIRTIME</span></div>
+            <div class="st-title">Cabinet clears emergency relief package after overnight session</div>
+            <div class="st-src">PTI + 3 corroborating sources · confidence 96%</div>
+          </div>
+          <div><div class="score">92<small>/100</small></div><div class="boost">↗ trend +9</div></div>
+        </div>
+        <div class="story verified">
+          <div>
+            <div class="st-meta">#2 · <span class="tag v">VERIFIED</span> · Economy · Mumbai</div>
+            <div class="st-title">Markets rally as RBI holds rate; rupee at 3-week high</div>
+            <div class="st-src">Reuters + 2 corroborating sources · confidence 88%</div>
+          </div>
+          <div><div class="score">81<small>/100</small></div></div>
+        </div>
+        <div class="story developing">
+          <div>
+            <div class="st-meta">#3 · <span class="tag d">DEVELOPING</span> · Public Safety · Chennai · <span class="flair">NEEDS REVIEW</span></div>
+            <div class="st-title">Heavy rain warning issued for coastal districts</div>
+            <div class="st-src">IMD · confidence 64%</div>
+          </div>
+          <div><div class="score">73<small>/100</small></div></div>
+        </div>
+      </div>
+      <div class="ticker"><span class="dot"></span> X-desk: <span class="k">#relief</span> velocity +214% in last 5 min · re-ranking…</div>
+    </div>
+  </div>
+</header>
+
+<section id="stats" style="border-top:0;padding-top:8px">
+  <div class="wrap">
+    <div class="stats">
+      <div class="stat"><div class="n">9</div><div class="l">weighted ranking variables</div></div>
+      <div class="stat"><div class="n">100</div><div class="l">point transparent score</div></div>
+      <div class="stat"><div class="n">&lt;1&nbsp;hr</div><div class="l">fresh-story discovery window</div></div>
+      <div class="stat"><div class="n">24/7</div><div class="l">hourly editorial briefs</div></div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Everything the assignment desk checks — running continuously.</h2>
+    <p class="lead">Your producers already weigh breaking status, emotion, political weight and social velocity in their heads. This desk does it for every incoming story, every minute, and shows its work.</p>
+    <div class="cards">
+      <div class="card"><div class="ic">📡</div><h3>Real-time ingestion</h3><p>Pulls Google News wires and past-hour keyword searches, deduplicates against the live board, and drops anything older than the freshness window.</p></div>
+      <div class="card"><div class="ic">📊</div><h3>Transparent 100-pt ranking</h3><p>Every story is scored across nine weighted variables. Each point is traceable to the exact phrase that triggered it — no black box.</p></div>
+      <div class="card"><div class="ic">🚀</div><h3>X trend momentum</h3><p>A conversation broker tracks handle velocity and volume spikes on X, then layers live momentum onto stories as they move.</p></div>
+      <div class="card"><div class="ic">✅</div><h3>Confidence &amp; corroboration</h3><p>Two credible sources is the bar for major breaking news. Stories below threshold are auto-flagged <b style="color:var(--amber)">NEEDS REVIEW</b>.</p></div>
+      <div class="card"><div class="ic">📨</div><h3>Hourly intelligence briefs</h3><p>A dark-styled rundown of the top stories, saved and emailed on the hour — subject line leads with your #1 story.</p></div>
+      <div class="card"><div class="ic">⚡</div><h3>Live SSE dashboard</h3><p>Rundown, tweets and velocity events stream to the board with no refresh. Fresh clients paint an instant snapshot on connect.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="scoring">
+  <div class="wrap">
+    <h2>A score you can defend in the morning meeting.</h2>
+    <p class="lead">Nine variables, each with a fixed ceiling and evidence attached. When an editor asks "why is this story #1?", the answer is on the screen — phrase by phrase.</p>
+    <div class="score-wrap" style="margin-top:40px">
+      <div class="bars">
+        <div class="bar"><div class="bar-top"><span>Breaking News Status</span><span class="p">15 max</span></div><div class="track"><div class="fill c1" style="width:100%"></div></div></div>
+        <div class="bar"><div class="bar-top"><span>Audience Emotion</span><span class="p">15 max</span></div><div class="track"><div class="fill c2" style="width:80%"></div></div></div>
+        <div class="bar"><div class="bar-top"><span>Public Safety / Utility</span><span class="p">15 max</span></div><div class="track"><div class="fill c3" style="width:67%"></div></div></div>
+        <div class="bar"><div class="bar-top"><span>Search Trend Momentum</span><span class="p">15 max</span></div><div class="track"><div class="fill c4" style="width:60%"></div></div></div>
+        <div class="bar"><div class="bar-top"><span>Political Importance</span><span class="p">12 max</span></div><div class="track"><div class="fill c5" style="width:100%"></div></div></div>
+        <div class="bar"><div class="bar-top"><span>Money / Economic Impact</span><span class="p">12 max</span></div><div class="track"><div class="fill c6" style="width:67%"></div></div></div>
+        <div class="bar"><div class="bar-top"><span>Celebrity Profile</span><span class="p">10 max</span></div><div class="track"><div class="fill c7" style="width:0%"></div></div></div>
+        <div class="bar"><div class="bar-top"><span>Visual Potential</span><span class="p">8 max</span></div><div class="track"><div class="fill c8" style="width:50%"></div></div></div>
+        <div class="bar"><div class="bar-top"><span>Unexpectedness / Novelty</span><span class="p">8 max</span></div><div class="track"><div class="fill c9" style="width:63%"></div></div></div>
+        <div class="total"><span style="color:var(--muted)">Composite score</span><span class="big">92<small style="color:var(--muted);font-size:15px">/100</small></span></div>
+      </div>
+      <div>
+        <h3 style="font-size:22px;margin-bottom:16px;color:#fff">Evidence, not vibes.</h3>
+        <p style="color:var(--muted);margin-bottom:20px">Each scorer returns the phrase that earned the points, so the breakdown reads like an editor's notes:</p>
+        <div class="mono" style="background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px;font-size:13px;color:var(--muted)">
+          <div style="color:var(--gold)">breaking&nbsp;+15</div>
+          <div style="padding-left:14px;color:var(--dim)">↳ "breaking marker: 'emergency'"</div>
+          <div style="color:var(--gold);margin-top:10px">political&nbsp;+12</div>
+          <div style="padding-left:14px;color:var(--dim)">↳ "power center: 'cabinet'"</div>
+          <div style="color:var(--gold);margin-top:10px">trend&nbsp;+9</div>
+          <div style="padding-left:14px;color:var(--dim)">↳ "X velocity spike +214% on #relief"</div>
+          <div style="margin-top:12px;border-top:1px dashed var(--line);padding-top:12px;color:var(--amber)">repetitive decay −3 <span style="color:var(--dim)">(stale hour)</span></div>
+        </div>
+        <p style="color:var(--dim);font-size:13.5px;margin-top:18px">Stories that keep repeating decay over time; genuinely moving ones get a momentum boost. The board stays current on its own.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="workflow">
+  <div class="wrap">
+    <h2>Wire to rundown in five steps.</h2>
+    <div class="flow">
+      <div class="step"><div class="num">01</div><h4>Discover</h4><p>Trending keywords and wires pull past-hour candidates into the pipeline.</p></div>
+      <div class="step"><div class="num">02</div><h4>Enrich</h4><p>Text is tagged for emotion, power figures, hazards and rich-media potential.</p></div>
+      <div class="step"><div class="num">03</div><h4>Score</h4><p>Nine variables run; confidence is set by source corroboration and evidence density.</p></div>
+      <div class="step"><div class="num">04</div><h4>Rank &amp; boost</h4><p>The X broker layers live trend momentum on top; stale stories decay off the board.</p></div>
+      <div class="step"><div class="num">05</div><h4>Brief</h4><p>Top stories flow into the live board and the hourly email brief to your editors.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="control">
+  <div class="wrap">
+    <h2>Advisory by design. Your desk stays in charge.</h2>
+    <div class="split" style="margin-top:36px">
+      <ul class="checklist">
+        <li><span class="check">✓</span><span><b>Rankings are recommendations</b>, never automated publishing. Final rundown control stays with human executive editors.</span></li>
+        <li><span class="check">✓</span><span><b>Every number is auditable</b> — the evidence trail behind each score is shown verbatim in the UI.</span></li>
+        <li><span class="check">✓</span><span><b>Low-confidence stories are flagged</b> <span style="color:var(--amber)">NEEDS HUMAN REVIEW</span> rather than pushed up the board.</span></li>
+        <li><span class="check">✓</span><span><b>Editors pick and dismiss</b> stories directly; the board backfills the next candidates automatically.</span></li>
+      </ul>
+      <div class="brief-card">
+        <div class="bh">📨 NEWSROOM INTELLIGENCE BRIEF — hourly email</div>
+        <div class="brief-row"><span class="pill b">BREAKING</span><span>Cabinet clears emergency relief package <span style="color:var(--dim)">· 92/100 · high-demand airtime</span></span></div>
+        <div class="brief-row"><span class="pill v">VERIFIED</span><span>Markets rally as RBI holds rate <span style="color:var(--dim)">· 81/100</span></span></div>
+        <div class="brief-row"><span class="pill d">DEVELOPING</span><span>Heavy rain warning, coastal districts <span style="color:var(--dim)">· 73/100 · needs review</span></span></div>
+        <div style="font-size:11.5px;color:var(--dim);margin-top:16px;border-top:1px solid var(--line);padding-top:14px">Rankings are evidence-based advisories; final rundown control remains with human executive editors.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="wrap">
+    <div class="cta">
+      <h2>Put a live intelligence desk in your newsroom.</h2>
+      <p>We'll run the ranking engine against your sources and show you a live rundown for your market — evidence trail and all.</p>
+      <div class="cta-row" style="justify-content:center">
+        <a href="mailto:contactgautam19@gmail.com?subject=Newsroom%20Intelligence%20—%20Demo%20request" class="btn btn-primary">Request a demo</a>
+        <a href="#features" class="btn btn-ghost">Explore the features</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-in">
+    <div class="logo">
+      <svg width="30" height="30"><use href="#mark"/></svg>
+      <span class="word" style="font-size:15px">NEWSROOM&nbsp;INTELLIGENCE</span>
+    </div>
+    <div>Advisory-only editorial decisioning · Human editors retain final control</div>
+    <div>© 2026 · Built by Gautam</div>
+  </div>
+</footer>
+
+</body>
+</html>

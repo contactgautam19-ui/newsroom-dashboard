@@ -37,7 +37,77 @@ const Ops = (() => {
 
     const sel = document.getElementById('news-interval');
     sel.value = String(d.news_refresh_minutes ?? 10);
+
+    WriterSettings.load();
   }
+
+  const WriterSettings = (() => {
+    const INPUT = 'w-full border border-line rounded-lg px-3 py-2 bg-white';
+
+    async function load() {
+      const host = document.getElementById('writer-settings');
+      if (!host) return;
+      let s;
+      try { s = await (await fetch('/api/settings')).json(); } catch { return; }
+      const keyPlaceholder = s.key_configured
+        ? `${esc(s.anthropic_api_key)} — paste to replace`
+        : 'Paste your Anthropic API key (sk-ant-…)';
+      host.innerHTML = `
+        <div>
+          <label class="block font-semibold mb-1">Channel name</label>
+          <input id="ws-channel" class="${INPUT}" value="${esc(s.channel_name || '')}">
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Voice &amp; tone description</label>
+          <textarea id="ws-voice" rows="3" class="${INPUT}" placeholder="Authoritative but conversational; short sentences; viewer-first; English with common Hindi terms where natural">${esc(s.voice_description || '')}</textarea>
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Sample articles</label>
+          <textarea id="ws-samples" rows="5" class="${INPUT}" placeholder="Paste 1-3 published articles that represent your voice">${esc(s.sample_articles || '')}</textarea>
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Model</label>
+          <select id="ws-model" class="${INPUT}">
+            <option value="claude-opus-4-8"${s.writer_model === 'claude-opus-4-8' ? ' selected' : ''}>Opus — best quality</option>
+            <option value="claude-sonnet-5"${s.writer_model === 'claude-sonnet-5' ? ' selected' : ''}>Sonnet — faster/cheaper</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Anthropic API key</label>
+          <input id="ws-key" type="password" class="${INPUT}" placeholder="${keyPlaceholder}">
+        </div>
+        <div>
+          <button id="ws-save" onclick="Ops.saveSettings(this)" class="px-4 py-2 rounded-xl bg-navy text-white font-semibold hover:bg-navy2">Save settings</button>
+        </div>`;
+    }
+
+    async function save(btn) {
+      const body = {
+        channel_name: document.getElementById('ws-channel').value,
+        voice_description: document.getElementById('ws-voice').value,
+        sample_articles: document.getElementById('ws-samples').value,
+        writer_model: document.getElementById('ws-model').value,
+        anthropic_api_key: document.getElementById('ws-key').value,
+      };
+      btn.textContent = 'Saving…';
+      try {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        btn.textContent = 'Saved';
+        load();
+      } catch {
+        btn.textContent = 'Save failed';
+      }
+      setTimeout(() => { btn.textContent = 'Save settings'; }, 2000);
+    }
+
+    return { load, save };
+  })();
+
+  function saveSettings(btn) { WriterSettings.save(btn); }
 
   document.getElementById('news-interval').addEventListener('change', async e => {
     await api(`/api/settings/news-refresh?minutes=${e.target.value}`);
@@ -60,5 +130,5 @@ const Ops = (() => {
     }
   }
 
-  return { load, ingestNow, briefNow };
+  return { load, ingestNow, briefNow, saveSettings };
 })();

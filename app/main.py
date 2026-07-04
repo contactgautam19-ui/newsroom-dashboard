@@ -17,7 +17,7 @@ import json
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -171,6 +171,52 @@ def story_pack(story_id: int):
     if pack is None:
         raise HTTPException(404, "Story not found")
     return pack
+
+
+@app.post("/api/stories/{story_id}/write")
+async def write_article(story_id: int, format: str = "web"):
+    if format not in ("web", "broadcast", "social"):
+        raise HTTPException(400, "format must be one of web, broadcast, social")
+    from app.news.writer import generate_article
+    try:
+        return await asyncio.get_running_loop().run_in_executor(
+            None, lambda: generate_article(story_id, format)
+        )
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.get("/api/stories/{story_id}/articles")
+def story_articles(story_id: int):
+    with db.connect() as con:
+        rows = con.execute(
+            "SELECT id, story_id, format, content, model, created_at, "
+            "input_tokens, output_tokens FROM articles "
+            "WHERE story_id=? AND error IS NULL ORDER BY id DESC",
+            (story_id,),
+        ).fetchall()
+    return db.rows_to_dicts(rows)
+
+
+@app.get("/api/settings")
+def get_settings():
+    from app import settings_store
+    pub = settings_store.get_public_settings()
+    pub["key_configured"] = bool(settings_store.get_setting("anthropic_api_key", ""))
+    return pub
+
+
+@app.post("/api/settings")
+def save_settings(payload: dict = Body(...)):
+    from app import settings_store
+    for key in ("channel_name", "voice_description", "sample_articles",
+                "writer_model"):
+        if key in payload and payload[key] is not None:
+            settings_store.set_setting(key, str(payload[key]))
+    api_key = payload.get("anthropic_api_key")
+    if api_key:  # empty string means "unchanged"
+        settings_store.set_setting("anthropic_api_key", str(api_key))
+    return settings_store.get_public_settings()
 
 
 @app.get("/api/ops")

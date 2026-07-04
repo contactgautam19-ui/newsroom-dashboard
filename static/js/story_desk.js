@@ -243,6 +243,17 @@ const StoryDesk = (() => {
         <button onclick="StoryDesk.closePack()" class="ml-auto text-sub hover:text-ink text-[20px] leading-none px-1">✕</button>
       </div>
 
+      <div class="mb-4 border border-line rounded-xl p-3">
+        <p class="text-[11.5px] font-semibold uppercase tracking-widest text-sub mb-2">Write with AI</p>
+        <div id="ai-write-buttons" class="flex gap-2 flex-wrap">
+          <button onclick="StoryDesk.writeArticle(${id}, 'web')" class="ai-write-btn rounded-xl border border-line font-semibold text-[12.5px] px-3 py-2 hover:border-ink">Web article</button>
+          <button onclick="StoryDesk.writeArticle(${id}, 'broadcast')" class="ai-write-btn rounded-xl border border-line font-semibold text-[12.5px] px-3 py-2 hover:border-ink">Broadcast script</button>
+          <button onclick="StoryDesk.writeArticle(${id}, 'social')" class="ai-write-btn rounded-xl border border-line font-semibold text-[12.5px] px-3 py-2 hover:border-ink">Social copy</button>
+        </div>
+        <p id="ai-write-status" class="text-[12px] text-sub mt-2"></p>
+        <div id="ai-write-output" class="mt-3 space-y-3"></div>
+      </div>
+
       <div class="mb-4">
         <p class="text-[11.5px] font-semibold uppercase tracking-widest text-sub mb-1.5">Sources (${(p.sources || []).length})</p>
         <p class="text-[13.5px]">${(p.sources || []).map(esc).join(' · ') || esc(p.publisher || '')}</p>
@@ -291,6 +302,74 @@ const StoryDesk = (() => {
       </div>`;
     document.getElementById('pack-content').innerHTML = html;
     document.getElementById('pack-overlay').classList.remove('hidden');
+    loadWriterState(id);
+  }
+
+  // ── AI writer ────────────────────────────────────────────────────────────
+
+  function draftCard(a, isPrevious) {
+    const meta = `${esc(a.format)} · ${esc(a.model || '')} · ${ageLabel(a.created_at)}`;
+    return `
+      <div class="border border-line rounded-xl p-3">
+        <div class="flex items-center gap-2 mb-1.5">
+          <span class="bg-amber1 text-amber8 font-semibold text-[11px] px-2 py-0.5 rounded-md">AI DRAFT — review before use</span>
+          <button onclick="StoryDesk.copyDraft(event)" class="ml-auto text-[12px] text-blue6 hover:underline">Copy</button>
+        </div>
+        <p class="text-[11.5px] text-sub mb-2">${meta}</p>
+        <pre class="draft-body text-[13.5px] leading-relaxed" style="white-space:pre-wrap;font-family:inherit">${esc(a.content)}</pre>
+      </div>`;
+  }
+
+  async function loadWriterState(id) {
+    const buttons = document.querySelectorAll('#ai-write-buttons .ai-write-btn');
+    const status = document.getElementById('ai-write-status');
+    const out = document.getElementById('ai-write-output');
+    let settings = {};
+    try { settings = await (await fetch('/api/settings')).json(); } catch {}
+    if (!settings.key_configured) {
+      buttons.forEach(b => { b.disabled = true; b.classList.add('opacity-50', 'cursor-not-allowed'); });
+      if (status) status.innerHTML = 'Add your Anthropic API key in Ops → AI writer settings to enable drafting.';
+    }
+    let drafts = [];
+    try { drafts = await (await fetch(`/api/stories/${id}/articles`)).json(); } catch {}
+    if (out && Array.isArray(drafts) && drafts.length) {
+      out.innerHTML = `<p class="text-[11.5px] text-sub">Previous drafts</p>` +
+        drafts.map(a => draftCard(a, true)).join('');
+    }
+  }
+
+  async function writeArticle(id, fmt) {
+    const buttons = document.querySelectorAll('#ai-write-buttons .ai-write-btn');
+    const status = document.getElementById('ai-write-status');
+    const out = document.getElementById('ai-write-output');
+    buttons.forEach(b => { b.disabled = true; b.classList.add('opacity-50', 'cursor-not-allowed'); });
+    if (status) { status.classList.remove('text-red6'); status.classList.add('text-sub'); status.textContent = 'Writing draft… this can take a minute or two.'; }
+    let r;
+    try {
+      const res = await fetch(`/api/stories/${id}/write?format=${fmt}`, { method: 'POST' });
+      r = await res.json();
+    } catch {
+      r = { ok: false, error: 'Network error reaching the writer.' };
+    }
+    buttons.forEach(b => { b.disabled = false; b.classList.remove('opacity-50', 'cursor-not-allowed'); });
+    if (r && r.ok && r.article) {
+      if (status) status.textContent = '';
+      out.insertAdjacentHTML('afterbegin', draftCard(r.article, false));
+    } else {
+      const msg = (r && r.error) || 'The writer could not produce a draft.';
+      if (status) { status.classList.remove('text-sub'); status.classList.add('text-red6'); status.textContent = ''; }
+      if (status) status.innerHTML = `<span class="text-red6 text-[12.5px]">${esc(msg)}</span>`;
+    }
+  }
+
+  function copyDraft(evt) {
+    const btn = evt.currentTarget;
+    const card = btn.closest('.border');
+    const pre = card ? card.querySelector('.draft-body') : null;
+    if (pre) navigator.clipboard.writeText(pre.textContent);
+    const prev = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(() => { btn.textContent = prev; }, 1500);
   }
 
   function closePack() {
@@ -298,5 +377,6 @@ const StoryDesk = (() => {
   }
 
   return { render, setFilter, pick, pickTop, openPack, openTopPack, closePack, refresh, menu,
+           writeArticle, copyDraft,
            get stories() { return stories; } };
 })();

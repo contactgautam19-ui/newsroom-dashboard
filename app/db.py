@@ -88,6 +88,23 @@ CREATE TABLE IF NOT EXISTS briefings (
     emailed INTEGER NOT NULL DEFAULT 0,
     email_error TEXT
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS articles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    story_id INTEGER NOT NULL,
+    format TEXT NOT NULL,
+    content TEXT NOT NULL,
+    model TEXT,
+    created_at TEXT NOT NULL,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    error TEXT
+);
 """
 
 
