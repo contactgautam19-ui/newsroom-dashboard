@@ -51,6 +51,15 @@
     source.onerror = () => {
       setLive('offline');
       if (pollingMode) return;
+      // On Vercel serverless /api/stream returns 404, which the browser treats
+      // as a fatal error: it fires onerror once and CLOSES the EventSource
+      // permanently (no auto-retry). So a single close with readyState CLOSED
+      // means SSE is unavailable — fall back to polling immediately rather than
+      // waiting for a second failure that will never come.
+      if (source.readyState === EventSource.CLOSED) {
+        startPolling();
+        return;
+      }
       failCount += 1;
       const withinWindow = Date.now() - firstAttemptAt < 10000;
       if (failCount >= 2 && withinWindow) {
@@ -154,6 +163,16 @@
 
     setInterval(pollOps, 5 * 60000);
   }
+
+  // Paint the board immediately on load from a plain fetch, independent of
+  // whether SSE or polling ends up driving live updates — the board is never
+  // empty while the transport is being established.
+  (async () => {
+    try {
+      const data = await (await fetch('/api/rundown')).json();
+      if (Array.isArray(data) && data.length) StoryDesk.render(data);
+    } catch { /* SSE/polling will fill it in */ }
+  })();
 
   connect();
 
