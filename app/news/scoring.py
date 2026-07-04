@@ -9,7 +9,7 @@ Public Safety 15 | Visual 8 | Novelty 8 | Search Trend Momentum 15 (broker-fed).
 
 from datetime import datetime, timezone
 
-from app.news.enrich import find_matches
+from app.news.enrich import find_matches, strip_times
 from app.news.models import EnrichedStory
 
 
@@ -58,7 +58,7 @@ def _flag_evidence(story: EnrichedStory, theme: str) -> list[str]:
 
 def score_story(story: EnrichedStory) -> dict:
     """Returns {'total', 'breakdown': [{key, label, max, points, evidence}]}."""
-    text = f"{story.raw.title} {story.raw.summary}"
+    text = strip_times(f"{story.raw.title} {story.raw.summary}")
     breakdown = []
 
     def add(key: str, points: int, evidence: list[str]) -> None:

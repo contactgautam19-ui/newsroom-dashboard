@@ -95,8 +95,16 @@ def find_matches(text: str, terms) -> list[str]:
     return [t for t in terms if _term_re(t).search(low)]
 
 
+_time_re = re.compile(r"\b\d{1,2}([:.]\d{2})?\s*(am|pm)\b", re.I)
+
+
+def strip_times(text: str) -> str:
+    """Remove time-of-day expressions so '2:30 PM' never matches 'PM'."""
+    return _time_re.sub(" ", text)
+
+
 def enrich(raw: RawArticle) -> EnrichedStory:
-    text = f"{raw.title} {raw.summary}"
+    text = strip_times(f"{raw.title} {raw.summary}")
 
     flags = {}
     flag_evidence = {}

@@ -21,6 +21,63 @@ _norm_re = re.compile(r"[^a-z0-9 ]+")
 
 LAST_STATS: dict = {}  # most recent cycle stats, for the Ops page
 
+# Non-news recurring content never belongs on an editorial rundown
+_JUNK_TOPIC_RE = re.compile(
+    r"lottery|horoscope|panchang|numerolog|astrolog|word of the day|"
+    r"wordle|crossword|gold rate|silver rate|petrol.{0,12}price today|quiz",
+    re.I,
+)
+
+# Bulletin/listing formats: recurring slots, not standalone headlines
+_JUNK_BULLETIN_RE = re.compile(
+    r"\bnews bulletin\b|\btop headlines\b|\bheadlines of the day\b|"
+    r"\bmorning headlines\b|\bevening bulletin\b|\bnews wrap\b|\bnewswrap\b|"
+    r"\bas it happened\b|\bin pics\b|\bin pictures\b|\bphotos of the day\b|"
+    r"\bpodcast\b|\bepisode \d+\b|\bdaily briefing\b|\blive blog\b|\be-?paper\b",
+    re.I,
+)
+
+# Structural junk detection: date/time-stamped titles with little substance
+_MONTH_NAMES = {
+    "january", "february", "march", "april", "may", "june", "july", "august",
+    "september", "october", "november", "december",
+}
+_WEEKDAY_NAMES = {
+    "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+}
+_DATE_TIME_RE = re.compile(
+    r"\b(" + "|".join(_MONTH_NAMES) + r")\b|\b\d{1,2}[:.]\d{2}\b|\b(am|pm)\b|\b20\d{2}\b",
+    re.I,
+)
+_JUNK_STOPWORDS = {
+    "the", "and", "for", "with", "from", "news", "live", "updates", "today", "latest",
+}
+_token_re = re.compile(r"[^a-z0-9 ]")
+
+
+def _substantive_tokens(title: str) -> list[str]:
+    words = _token_re.sub("", title.lower()).split()
+    return [
+        w for w in words
+        if w.isalpha() and len(w) >= 3
+        and w not in _JUNK_STOPWORDS
+        and w not in _MONTH_NAMES
+        and w not in _WEEKDAY_NAMES
+        and w not in ("am", "pm")
+    ]
+
+
+def is_junk_title(title: str) -> bool:
+    """True when a title is recurring non-news content or a bulletin/listing
+    slot (bulletin name, timestamp, brand) rather than an actual headline."""
+    if _JUNK_TOPIC_RE.search(title):
+        return True
+    if _JUNK_BULLETIN_RE.search(title):
+        return True
+    if _DATE_TIME_RE.search(title) and len(_substantive_tokens(title)) < 3:
+        return True
+    return False
+
 
 def _dedup_key(title: str) -> str:
     norm = _norm_re.sub("", title.lower())
@@ -175,12 +232,7 @@ def run_ingest_cycle(manual: bool = False) -> dict:
     feed_stats["dropped_stale"] = len(candidates) - len(fresh)
 
     # Non-news recurring content never belongs on an editorial rundown
-    junk = re.compile(
-        r"lottery|horoscope|panchang|numerolog|astrolog|word of the day|"
-        r"wordle|crossword|gold rate|silver rate|petrol.{0,12}price today|quiz",
-        re.I,
-    )
-    candidates = [a for a in fresh if not junk.search(a.title)]
+    candidates = [a for a in fresh if not is_junk_title(a.title)]
     feed_stats["dropped_junk"] = len(fresh) - len(candidates)
 
     # Score every clustered candidate, keep the strongest for the rundown
@@ -221,7 +273,7 @@ def run_ingest_cycle(manual: bool = False) -> dict:
         feed_stats["retired"] = retired
         # sweep previously-ingested junk off the board too
         for row in con.execute("SELECT id, title FROM stories WHERE active=1"):
-            if junk.search(row["title"]):
+            if is_junk_title(row["title"]):
                 con.execute("UPDATE stories SET active=0 WHERE id=?", (row["id"],))
 
         # stories not in this cycle age one stale cycle (repetitive decay) —

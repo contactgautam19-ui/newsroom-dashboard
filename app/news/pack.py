@@ -12,13 +12,16 @@ _word_re = re.compile(r"[^a-z0-9 ]")
 _STOP = set(
     "the a an and or of in on to for with at by from as is are was be after"
     " amid over under his her their its says say said new live update updates"
-    " india indian latest news today breaking case".split()
+    " india indian latest news today breaking case"
+    " january february march april may june july august september october"
+    " november december jan feb mar apr jun jul aug sep oct nov dec"
+    " monday tuesday wednesday thursday friday saturday sunday".split()
 )
 
 
 def _headline_tokens(title: str) -> set[str]:
     return {w for w in _word_re.sub("", title.lower()).split()
-            if len(w) > 3 and w not in _STOP}
+            if len(w) > 3 and w not in _STOP and not w.isdigit()}
 
 
 def _related_tweets(con, title: str, limit: int = 6) -> list[dict]:
