@@ -7,7 +7,7 @@ EMAIL_ENABLED."""
 import logging
 import smtplib
 import ssl
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from jinja2 import Environment, select_autoescape
 
@@ -214,7 +214,7 @@ BRIEF_TEMPLATE = _env.from_string("""\
         <span style="font-weight:bold;">{{ sig.display_name }} @{{ sig.handle }}</span> &mdash; {{ sig.summary }}
       </div>
       <div style="font-size:11.5px;color:#98A2B3;">
-        {{ sig.reasons | join(' · ') }}{% if sig.linked_story %} · matches board story{% endif %}
+        {{ sig.reasons | join(' · ') }}{% if sig.linked_story and 'matches a board story' not in sig.reasons %} · matches board story{% endif %}
       </div>
     </td></tr>
   </table>
@@ -252,7 +252,9 @@ BRIEF_TEMPLATE = _env.from_string("""\
 def build_brief() -> tuple[str, str]:
     stories = get_rundown(limit=6)
     signals = top_signals()
-    now = datetime.now()
+    # Always show India time in the email, regardless of server timezone
+    # (Vercel runs in UTC; the header/subject are labelled IST).
+    now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
 
     calls = [publish_call(s) for s in stories]
     for s, c in zip(stories, calls):
