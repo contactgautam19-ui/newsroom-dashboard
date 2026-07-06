@@ -80,6 +80,10 @@ def load_streams() -> list[dict]:
         return []
 
 
+_LIVE_URL = "https://www.youtube.com/channel/{cid}/live"
+_VIDEOID_RE = re.compile(r'"videoId":"([A-Za-z0-9_-]{6,})"')
+
+
 def fetch_live_title(video_id: str) -> str | None:
     """Current title of a live stream via keyless oEmbed (None if unavailable)."""
     try:
@@ -90,6 +94,33 @@ def fetch_live_title(video_id: str) -> str | None:
         return (resp.json() or {}).get("title")
     except (httpx.HTTPError, ValueError):
         return None
+
+
+def resolve_live_video_id(channel_id: str) -> str | None:
+    """Current live video for a channel via its /live page (None if not live)."""
+    try:
+        resp = httpx.get(_LIVE_URL.format(cid=channel_id), timeout=FETCH_TIMEOUT,
+                         follow_redirects=True, headers=_HEADERS)
+        if resp.status_code != 200:
+            return None
+        m = _VIDEOID_RE.search(resp.text)
+        return m.group(1) if m else None
+    except httpx.HTTPError:
+        return None
+
+
+def stream_title(st: dict) -> str | None:
+    """Title for one configured stream. Uses the pinned persistent video_id when
+    set; falls back to resolving the channel's current /live video (which also
+    self-heals a pinned stream that has since ended, and covers channels like
+    Times Now that only run rotating live streams)."""
+    vid = st.get("video_id")
+    title = fetch_live_title(vid) if vid else None
+    if not title and st.get("channel_id"):
+        live_vid = resolve_live_video_id(st["channel_id"])
+        if live_vid:
+            title = fetch_live_title(live_vid)
+    return title
 
 
 def _strip_label_prefix(seg: str) -> str:
@@ -165,8 +196,8 @@ def poll_onair() -> dict:
     # datacenter IP, and sequential fetches blew past the serverless 60s cap.
     def _titled(st: dict) -> tuple[str, str | None]:
         try:
-            return st.get("name", "?"), fetch_live_title(st["video_id"])
-        except Exception as exc:  # noqa: BLE001 — recorded per stream below
+            return st.get("name", "?"), stream_title(st)
+        except Exception:  # recorded per stream below
             return st.get("name", "?"), None
     with ThreadPoolExecutor(max_workers=max(1, len(streams))) as pool:
         results = list(pool.map(_titled, streams)) if streams else []

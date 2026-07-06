@@ -1,8 +1,8 @@
 [
-  {"name": "India Today", "source": "youtube", "video_id": "sYZtOFzM78M"},
-  {"name": "NDTV 24x7",   "source": "youtube", "video_id": "Ex8VcIn_8IQ"},
-  {"name": "Republic TV", "source": "youtube", "video_id": "FHVemxB6cU0"},
-  {"name": "CNN-News18",  "source": "youtube", "video_id": "Owi9__uQZN4"},
-  {"name": "WION",        "source": "youtube", "video_id": "3yJ3ohHb3dM"},
-  {"name": "Times Now",   "source": "web-ocr", "url": "https://www.timesnownews.com/live-tv"}
+  {"name": "India Today", "source": "youtube", "video_id": "sYZtOFzM78M", "channel_id": "UCYPvAwZP8pZhSMW8qs7cVCw"},
+  {"name": "NDTV 24x7",   "source": "youtube", "video_id": "Ex8VcIn_8IQ", "channel_id": "UCZFMm1mMw0F81Z37aaEzTUA"},
+  {"name": "Republic TV", "source": "youtube", "video_id": "FHVemxB6cU0", "channel_id": "UCwqusr8YDwM-3mEYTDeJHzw"},
+  {"name": "CNN-News18",  "source": "youtube", "video_id": "Owi9__uQZN4", "channel_id": "UCef1-8eOpJgud7szVPlZQAQ"},
+  {"name": "WION",        "source": "youtube", "video_id": "3yJ3ohHb3dM", "channel_id": "UC_gUM8rL-Lrg6O3adPW9K1g"},
+  {"name": "Times Now",   "source": "youtube", "channel_id": "UC6RJ7-PaXg6TIH2BzZfTV7w", "ocr_url": "https://www.timesnownews.com/live-tv"}
 ]
