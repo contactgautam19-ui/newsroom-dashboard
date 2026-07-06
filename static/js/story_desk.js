@@ -79,7 +79,7 @@ const StoryDesk = (() => {
         <p class="text-[12.5px] text-sub mt-1.5"><span class="font-semibold text-ink/60">Why:</span> ${esc(whyLine(s))}</p>
       </div>
       <div class="w-full sm:w-auto flex sm:flex-col flex-row gap-2 items-stretch shrink-0 sm:justify-center">
-        <button onclick="StoryDesk.pick(${s.id})" class="flex-1 sm:flex-none text-[12.5px] font-semibold px-4 py-2 rounded-xl ${s.picked ? 'bg-green1 text-green8 border border-green6/30' : 'bg-navy text-white hover:bg-navy2'} whitespace-nowrap transition-colors">${s.picked ? '✓ Picked' : 'Pick Story'}</button>
+        <button onclick="NPro.open(${s.id})" class="flex-1 sm:flex-none text-[12.5px] font-semibold px-4 py-2 rounded-xl bg-navy text-white hover:bg-navy2 whitespace-nowrap transition-colors">Pick Story</button>
         <button onclick="StoryDesk.openPack(${s.id})" class="flex-1 sm:flex-none text-[12.5px] font-semibold px-4 py-2 rounded-xl border border-line bg-white hover:border-ink whitespace-nowrap">Story Pack</button>
         <div class="relative shrink-0">
           <button onclick="StoryDesk.menu(event, ${s.id})" class="text-sub hover:text-ink p-2 text-[17px] leading-none">⋮</button>
@@ -197,8 +197,9 @@ const StoryDesk = (() => {
   }
 
   function pickTop() {
-    const top = stories.filter(s => !s.picked)[0];
-    if (top) pick(top.id);
+    // "Pick a Story" now launches N-Pro on the top-ranked story.
+    const top = stories.filter(s => !s.picked)[0] || stories[0];
+    if (top) NPro.open(top.id);
   }
 
   function openTopPack() {
@@ -216,7 +217,8 @@ const StoryDesk = (() => {
       <div class="story-menu absolute right-0 top-7 z-20 bg-white border border-line rounded-xl shadow-lg py-1 w-44 text-[13px]">
         ${s.url ? `<a href="${esc(s.url)}" target="_blank" class="block px-3.5 py-2 hover:bg-paper">Open article ↗</a>` : ''}
         <button onclick="StoryDesk.openPack(${id})" class="block w-full text-left px-3.5 py-2 hover:bg-paper">Story pack</button>
-        <button onclick="StoryDesk.pick(${id})" class="block w-full text-left px-3.5 py-2 hover:bg-paper">${s.picked ? 'Un-pick story' : 'Pick story'}</button>
+        <button onclick="NPro.open(${id})" class="block w-full text-left px-3.5 py-2 hover:bg-paper">Produce with N-Pro</button>
+        <button onclick="StoryDesk.pick(${id})" class="block w-full text-left px-3.5 py-2 hover:bg-paper">${s.picked ? 'Remove from My Picks' : 'Add to My Picks'}</button>
       </div>`);
     setTimeout(() => document.addEventListener('click', () => {
       document.querySelectorAll('.story-menu').forEach(m => m.remove());

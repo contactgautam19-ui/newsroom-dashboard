@@ -274,9 +274,63 @@ tailwind.config = { theme: { extend: {
   <div class="max-w-2xl mx-auto my-2 bg-white rounded-2xl border border-line p-5 md:p-6 fade-up" id="pack-content"></div>
 </div>
 
+<!-- N-Pro — AI news-script assistant (full-screen console) -->
+<div id="npro" class="hidden fixed inset-0 z-50 bg-paper">
+  <div class="flex h-full">
+    <!-- Left rail -->
+    <aside class="hidden md:flex flex-col w-[224px] shrink-0 bg-navy text-white px-3 py-4">
+      <div class="flex items-center gap-2 px-2 mb-5">
+        <span class="w-7 h-7 rounded-lg bg-brand flex items-center justify-center font-extrabold text-[15px]">N</span>
+        <div><p class="text-[15px] font-bold leading-none">N-Pro</p><p class="text-[10.5px] text-white/50 mt-0.5">Script Assistant</p></div>
+      </div>
+      <div class="space-y-4 overflow-y-auto flex-1 text-[13px]">
+        <div><p class="text-[10.5px] font-semibold tracking-widest text-white/40 uppercase px-2 mb-1.5">Recent Stories</p><div id="npro-recent" class="space-y-0.5"></div></div>
+        <div><p class="text-[10.5px] font-semibold tracking-widest text-white/40 uppercase px-2 mb-1.5">Saved Scripts</p><div id="npro-saved" class="space-y-0.5"><p class="px-2 text-white/40 text-[12px]">None yet</p></div></div>
+        <div><p class="text-[10.5px] font-semibold tracking-widest text-white/40 uppercase px-2 mb-1.5">History</p><div id="npro-history" class="space-y-0.5"></div></div>
+      </div>
+    </aside>
+
+    <!-- Center: conversation -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <header class="flex items-center gap-3 px-4 md:px-6 py-3 border-b border-line bg-white">
+        <span class="md:hidden w-7 h-7 rounded-lg bg-brand text-white flex items-center justify-center font-extrabold text-[14px]">N</span>
+        <div class="min-w-0">
+          <p id="npro-title" class="text-[16px] font-bold truncate">N-Pro</p>
+          <p id="npro-status" class="text-[11.5px] text-sub truncate">News-production assistant</p>
+        </div>
+        <div class="ml-auto flex items-center gap-1.5">
+          <button onclick="NPro.toggleIntel()" class="lg:hidden text-[12px] font-semibold border border-line rounded-lg px-3 py-1.5">Intel</button>
+          <button onclick="NPro.close()" class="text-sub hover:text-ink rounded-lg px-3 py-1.5 text-[13px] font-semibold border border-line">✕ Close</button>
+        </div>
+      </header>
+      <div id="npro-thread" class="flex-1 overflow-y-auto px-4 md:px-6 py-5 space-y-4"></div>
+      <footer class="border-t border-line bg-white px-4 md:px-6 py-3">
+        <div class="flex items-end gap-2 max-w-[900px] mx-auto">
+          <textarea id="npro-input" rows="1" placeholder="Ask N-Pro about any story, or paste a topic…"
+            class="flex-1 resize-none border border-line rounded-xl px-3.5 py-2.5 text-[14px] focus:outline-none focus:border-accent max-h-32"></textarea>
+          <button onclick="NPro.ask()" id="npro-send" class="bg-navy text-white rounded-xl px-4 py-2.5 text-[13.5px] font-semibold hover:bg-navy2 shrink-0">Send</button>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Right: story intelligence -->
+    <aside id="npro-intel-panel" class="hidden lg:flex flex-col w-[312px] shrink-0 border-l border-line bg-white">
+      <div class="flex items-center gap-2 px-4 py-3 border-b border-line">
+        <p class="text-[13px] font-bold">Story Intelligence</p>
+        <span id="npro-intel-src" class="text-[10px] text-sub ml-auto"></span>
+        <button onclick="NPro.toggleIntel()" class="lg:hidden text-sub text-[16px] leading-none px-1">✕</button>
+      </div>
+      <div id="npro-intel" class="flex-1 overflow-y-auto px-4 py-3 space-y-4 text-[13px]">
+        <p class="text-sub text-[12.5px]">Open a story to build its intelligence panel.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
 <script src="/static/js/app.js"></script>
 <script src="/static/js/story_desk.js"></script>
 <script src="/static/js/live_coverage.js"></script>
+<script src="/static/js/npro.js"></script>
 <script src="/static/js/x_desk.js"></script>
 <script src="/static/js/ops.js"></script>
 <script src="/static/js/views.js"></script>

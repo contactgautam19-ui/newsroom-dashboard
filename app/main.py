@@ -347,6 +347,113 @@ def story_articles(story_id: int):
     return db.rows_to_dicts(rows)
 
 
+# --------------------------------------------------------------------------
+# N-Pro — AI news-script assistant (launched from Pick Story)
+# --------------------------------------------------------------------------
+def _npro_formats() -> list[dict]:
+    from app.npro import recipes
+    out = []
+    for fid in recipes.FORMAT_ORDER:
+        r = recipes.RECIPES[fid]
+        out.append({"id": fid, "label": r["label"], "icon": r["icon"],
+                    "blurb": r["blurb"], "questions": r["questions"]})
+    actions = [{"id": k, "label": v[0]} for k, v in recipes.SMART_ACTIONS.items()]
+    return {"formats": out, "actions": actions}
+
+
+@app.get("/api/npro/formats")
+def npro_formats():
+    return _npro_formats()
+
+
+@app.post("/api/npro/open")
+async def npro_open(payload: dict = Body(...)):
+    """Open N-Pro on a picked story: retrieve fresh reporting, summarise, and
+    return the format menu + engine status."""
+    from app.news.pack import build_pack
+    from app.npro import engine, retrieval
+    story_id = payload.get("story_id")
+    story = build_pack(int(story_id)) if story_id is not None else None
+    topic = (story or {}).get("title") or payload.get("topic") or ""
+    loop = asyncio.get_running_loop()
+    retrieved = await loop.run_in_executor(None, lambda: retrieval.search_news(topic))
+    summary = await loop.run_in_executor(None, lambda: engine.summarize(topic, retrieved))
+    return {
+        "topic": topic,
+        "story": {"id": story.get("id"), "title": story.get("title"),
+                  "status": story.get("status"), "score": story.get("score"),
+                  "publisher": story.get("publisher")} if story else None,
+        "summary": summary, "retrieved": retrieved,
+        "has_key": engine.has_key(), **_npro_formats(),
+    }
+
+
+@app.post("/api/npro/retrieve")
+async def npro_retrieve(payload: dict = Body(...)):
+    """Free-form question -> fresh reporting + a producer summary."""
+    from app.npro import engine, retrieval
+    query = (payload.get("query") or "").strip()
+    if not query:
+        raise HTTPException(400, "query required")
+    loop = asyncio.get_running_loop()
+    retrieved = await loop.run_in_executor(None, lambda: retrieval.search_news(query))
+    summary = await loop.run_in_executor(None, lambda: engine.summarize(query, retrieved))
+    return {"topic": query, "summary": summary, "retrieved": retrieved}
+
+
+@app.post("/api/npro/context")
+async def npro_context(payload: dict = Body(...)):
+    """Get More Context: one fresh, non-duplicative angle."""
+    from app.npro import retrieval
+    topic = (payload.get("topic") or "").strip()
+    if not topic:
+        raise HTTPException(400, "topic required")
+    return await asyncio.get_running_loop().run_in_executor(
+        None, lambda: retrieval.more_context(
+            topic, payload.get("used_angles") or [],
+            payload.get("seen_urls") or [], payload.get("seen_titles") or []))
+
+
+@app.post("/api/npro/generate")
+async def npro_generate(payload: dict = Body(...)):
+    from app.news.pack import build_pack
+    from app.npro import engine
+    fmt = payload.get("format")
+    if not fmt:
+        raise HTTPException(400, "format required")
+    sid = payload.get("story_id")
+    story = build_pack(int(sid)) if sid is not None else None
+    return await asyncio.get_running_loop().run_in_executor(
+        None, lambda: engine.generate(story, fmt, payload.get("params") or {},
+                                       payload.get("retrieved") or []))
+
+
+@app.post("/api/npro/action")
+async def npro_action(payload: dict = Body(...)):
+    from app.news.pack import build_pack
+    from app.npro import engine
+    action = payload.get("action")
+    content = payload.get("content") or ""
+    if not action or not content:
+        raise HTTPException(400, "action and content required")
+    sid = payload.get("story_id")
+    story = build_pack(int(sid)) if sid is not None else None
+    return await asyncio.get_running_loop().run_in_executor(
+        None, lambda: engine.smart_action(action, content, story,
+                                           payload.get("retrieved") or []))
+
+
+@app.post("/api/npro/intelligence")
+async def npro_intelligence(payload: dict = Body(...)):
+    from app.news.pack import build_pack
+    from app.npro import engine
+    sid = payload.get("story_id")
+    story = build_pack(int(sid)) if sid is not None else None
+    topic = (story or {}).get("title") or payload.get("topic") or ""
+    return await asyncio.get_running_loop().run_in_executor(
+        None, lambda: engine.intelligence(topic, story, payload.get("retrieved") or []))
+
+
 @app.get("/api/settings")
 def get_settings():
     from app import settings_store
