@@ -97,9 +97,15 @@ def fetch_live_title(video_id: str) -> str | None:
 
 
 def resolve_live_video_id(channel_id: str) -> str | None:
-    """Current live video for a channel via its /live page (None if not live)."""
+    """Current live video for a channel via its /live page (None if not live).
+
+    The videoId sits deep in a ~1.2MB page, so this pulls real bytes and is
+    slow from a throttled datacenter IP — it is therefore only used off the
+    serverless path (see ``stream_title``); the always-on local worker does the
+    resolution and self-healing, and the Vercel refresh sticks to fast pinned
+    oEmbed lookups."""
     try:
-        resp = httpx.get(_LIVE_URL.format(cid=channel_id), timeout=FETCH_TIMEOUT,
+        resp = httpx.get(_LIVE_URL.format(cid=channel_id), timeout=20,
                          follow_redirects=True, headers=_HEADERS)
         if resp.status_code != 200:
             return None
@@ -116,7 +122,10 @@ def stream_title(st: dict) -> str | None:
     Times Now that only run rotating live streams)."""
     vid = st.get("video_id")
     title = fetch_live_title(vid) if vid else None
-    if not title and st.get("channel_id"):
+    # /live resolution pulls a big page and is slow from Vercel's IPs, so keep
+    # it off the serverless request path — the local worker handles resolution,
+    # Times Now, and self-healing of stale pins.
+    if not title and st.get("channel_id") and not config.IS_SERVERLESS:
         live_vid = resolve_live_video_id(st["channel_id"])
         if live_vid:
             title = fetch_live_title(live_vid)
