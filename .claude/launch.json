@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["run.py"],
       "port": 8000
+    },
+    {
+      "name": "newsroom-serverless",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["_serverless_local.py"],
+      "port": 8000
     }
   ]
 }
