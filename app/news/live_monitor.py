@@ -316,3 +316,120 @@ def run_live_cycle() -> dict:
     changed = match_to_board()
     return {"clips_in_window": LAST_POLL.get("clips_in_window", 0),
             "stories_changed": changed}
+
+
+# ── Hourly "what's on air" digest ──────────────────────────────────────────
+
+_IST = timezone(timedelta(hours=5, minutes=30))
+# trailing tokens that are pure branding/format noise, stripped for display
+_TRAIL_NOISE = {
+    "news", "news18", "live", "video", "shorts", "short", "4k", "hd", "watch",
+    "latest", "breaking", "exclusive", "update", "updates", "full", "clip",
+    "wion", "ndtv", "indiatoday", "n18", "n18g", "n18v", "n18s", "g", "viral",
+}
+# multi-word channel brand phrases stripped when trailing a headline
+_TRAIL_BRAND_PHRASES = (
+    "cnn news18", "cnn-news18", "india today", "times now", "republic tv",
+    "republic", "ndtv 24x7", "wion news",
+)
+
+
+def _hour_label(dt: datetime) -> str:
+    """12-hour '5 – 6 PM' label for an IST hour-start (cross-platform, no %-I)."""
+    def fmt(d: datetime) -> str:
+        h = d.hour % 12 or 12
+        return f"{h} {'AM' if d.hour < 12 else 'PM'}"
+    return f"{fmt(dt)} – {fmt(dt + timedelta(hours=1))}"
+
+
+def _display_title(title: str) -> str:
+    """Trim trailing branding/format noise (News18, WION, India Today, 4K,
+    #Shorts…) so the on-air line reads cleanly. Loops single-token and
+    multi-word brand phrases until stable. Conservative: never returns empty."""
+    text = re.sub(r"\s+", " ", (title or "").strip())
+
+    def strip_once(s: str) -> str:
+        low = s.lower()
+        for phrase in _TRAIL_BRAND_PHRASES:
+            if low.endswith(" " + phrase) or low == phrase:
+                return s[: len(s) - len(phrase)].rstrip(" -–—|:")
+        words = s.split()
+        if words:
+            tail = words[-1].lstrip("#").rstrip(":").lower()
+            if tail and (tail in _TRAIL_NOISE or tail in _BRAND_WORDS):
+                return " ".join(words[:-1])
+        return s
+
+    prev = None
+    while prev != text and text:
+        prev = text
+        text = strip_once(text).strip(" -–—|:")
+    return text or re.sub(r"\s+", " ", (title or "").strip())
+
+
+def hourly_coverage(hours_back: int = 8, per_channel: int = 6) -> dict:
+    """What each rival channel aired, bucketed by IST clock-hour.
+
+    Returns hours newest-first, each with the channels that aired in that hour
+    and their (deduped, cleaned) headlines. Drives the "What's on air — by the
+    hour" panel on the story desk.
+    """
+    now = datetime.now(timezone.utc)
+    since = (now - timedelta(hours=hours_back)).isoformat()
+    with db.connect() as con:
+        rows = con.execute(
+            "SELECT channel, title, published_at FROM live_coverage "
+            "WHERE published_at >= ? ORDER BY published_at DESC",
+            (since,),
+        ).fetchall()
+    rows = db.rows_to_dicts(rows)
+
+    # hour_start(IST) -> channel -> ordered unique titles
+    buckets: dict[datetime, dict[str, list[str]]] = {}
+    seen: dict[tuple, set[str]] = {}
+    for r in rows:
+        try:
+            dt = datetime.fromisoformat(r["published_at"])
+        except (TypeError, ValueError):
+            continue
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        ist = dt.astimezone(_IST)
+        hour_start = ist.replace(minute=0, second=0, microsecond=0)
+        channel = r["channel"]
+        title = _display_title(r["title"])
+        if not title:
+            continue
+        chan_map = buckets.setdefault(hour_start, {})
+        titles = chan_map.setdefault(channel, [])
+        seen_key = (hour_start, channel)
+        seen_set = seen.setdefault(seen_key, set())
+        norm = title.lower()
+        if norm in seen_set:
+            continue
+        seen_set.add(norm)
+        titles.append(title)
+
+    hours = []
+    for hour_start in sorted(buckets.keys(), reverse=True):
+        chan_map = buckets[hour_start]
+        channels = [
+            {"channel": ch, "count": len(titles),
+             "titles": titles[:per_channel]}
+            for ch, titles in sorted(chan_map.items(),
+                                     key=lambda kv: len(kv[1]), reverse=True)
+        ]
+        hours.append({
+            "label": _hour_label(hour_start),
+            "date": hour_start.strftime("%d %b"),
+            "start_iso": hour_start.isoformat(),
+            "total": sum(len(t) for t in chan_map.values()),
+            "channels": channels,
+        })
+
+    return {
+        "generated_at": now.isoformat(),
+        "channels": [c.get("name") for c in load_channels()],
+        "clips_in_window": len(rows),
+        "hours": hours,
+    }

@@ -249,6 +249,26 @@ def cron_live(request: Request, secret: str = ""):
     return live_monitor.run_live_cycle()
 
 
+@app.get("/api/live-coverage")
+def live_coverage(hours: int = 8):
+    """What rival TV channels aired, bucketed by IST hour (reads stored clips —
+    fast, no network). Use POST /api/live-coverage/refresh to pull fresh feeds."""
+    from app.news import live_monitor
+    return live_monitor.hourly_coverage(hours_back=max(1, min(hours, 24)))
+
+
+@app.post("/api/live-coverage/refresh")
+async def live_coverage_refresh(hours: int = 8):
+    """Poll rival channels' live feeds, re-match the board, then return the
+    refreshed hourly digest. ~6 keyless HTTP fetches; safe to call on demand."""
+    from app.news import live_monitor
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, live_monitor.run_live_cycle)
+    return await loop.run_in_executor(
+        None, lambda: live_monitor.hourly_coverage(hours_back=max(1, min(hours, 24)))
+    )
+
+
 @app.get("/api/cron/brief")
 def cron_brief(request: Request, secret: str = ""):
     _require_cron(secret, request)

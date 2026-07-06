@@ -161,6 +161,24 @@ tailwind.config = { theme: { extend: {
           </div>
         </div>
 
+        <!-- What's on air — hourly rival-TV coverage -->
+        <section class="bg-white border border-line rounded-2xl p-5 mb-6">
+          <div class="flex items-center gap-3 flex-wrap mb-1">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-brand"></span>
+              <h2 class="text-[17px] font-bold">What's on air — by the hour</h2>
+            </div>
+            <button id="live-cov-refresh" onclick="LiveCoverage.refresh()" class="flex items-center gap-2 bg-navy text-white text-[13px] font-semibold px-4 py-2 rounded-xl hover:bg-navy2">
+              <span id="live-cov-icon">⟳</span> Refresh
+            </button>
+            <span id="live-cov-label" class="text-[12.5px] text-sub"></span>
+          </div>
+          <p class="text-[12.5px] text-sub mb-4">Live rundown mirrored from rival TV channels' feeds — what NDTV, India Today, Times Now, Republic, CNN-News18 &amp; WION aired each hour (IST).</p>
+          <div id="live-cov-body">
+            <p class="text-sub text-[13.5px] py-6 text-center">Loading on-air coverage…</p>
+          </div>
+        </section>
+
         <div class="flex items-center gap-3 flex-wrap mb-4">
           <h2 class="text-[17px] font-bold">All Stories</h2>
           <span id="story-count" class="min-w-[24px] h-6 px-1.5 rounded-full bg-blue6 text-white text-[12px] font-semibold flex items-center justify-center">0</span>
@@ -258,6 +276,7 @@ tailwind.config = { theme: { extend: {
 
 <script src="/static/js/app.js"></script>
 <script src="/static/js/story_desk.js"></script>
+<script src="/static/js/live_coverage.js"></script>
 <script src="/static/js/x_desk.js"></script>
 <script src="/static/js/ops.js"></script>
 <script src="/static/js/views.js"></script>
