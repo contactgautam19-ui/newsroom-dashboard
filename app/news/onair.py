@@ -24,6 +24,7 @@ import hashlib
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -33,7 +34,7 @@ from app import config, db
 log = logging.getLogger("newsroom.onair")
 
 OEMBED = "https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={vid}&format=json"
-FETCH_TIMEOUT = 12
+FETCH_TIMEOUT = 8
 _HEADERS = {"User-Agent": "Mozilla/5.0 (NewsroomDashboard/1.0)"}
 IST = timezone(timedelta(hours=5, minutes=30))
 WINDOW_HOURS = 12   # how far back the panel can look
@@ -158,37 +159,44 @@ def poll_onair() -> dict:
     errors: list[str] = []
     n_head = n_break = 0
 
+    streams = [s for s in load_streams() if s.get("source") == "youtube"]
+
+    # Fetch all live titles in parallel — YouTube oEmbed can be slow from a
+    # datacenter IP, and sequential fetches blew past the serverless 60s cap.
+    def _titled(st: dict) -> tuple[str, str | None]:
+        try:
+            return st.get("name", "?"), fetch_live_title(st["video_id"])
+        except Exception as exc:  # noqa: BLE001 — recorded per stream below
+            return st.get("name", "?"), None
+    with ThreadPoolExecutor(max_workers=max(1, len(streams))) as pool:
+        results = list(pool.map(_titled, streams)) if streams else []
+
     with db.connect() as con:
-        for st in load_streams():
-            if st.get("source") != "youtube":
+        for name, title in results:
+            if not title:
+                errors.append(f"{name}: no live title")
                 continue
-            name = st.get("name", "?")
-            try:
-                title = fetch_live_title(st["video_id"])
-                if not title:
-                    errors.append(f"{name}: no live title")
-                    continue
-                for item in parse_headlines(title):
-                    slug = hashlib.sha1(
-                        f"{name}|{item['headline'].lower()}|{hour_key}".encode()
-                    ).hexdigest()[:16]
-                    con.execute(
-                        """INSERT INTO live_onair
-                           (slug, channel, headline, hour_key, breaking,
-                            first_seen, last_seen)
-                           VALUES (?,?,?,?,?,?,?)
-                           ON CONFLICT (slug) DO UPDATE SET
-                             last_seen=excluded.last_seen,
-                             headline=excluded.headline,
-                             breaking=MAX(live_onair.breaking, excluded.breaking)""",
-                        (slug, name, item["headline"], hour_key,
-                         1 if item["breaking"] else 0, now_iso, now_iso),
-                    )
-                    n_head += 1
-                    n_break += 1 if item["breaking"] else 0
-            except Exception as exc:  # one bad stream shouldn't kill the poll
-                errors.append(f"{name}: {exc}")
-                log.warning("on-air poll failed for %s: %s", name, exc)
+            for item in parse_headlines(title):
+                slug = hashlib.sha1(
+                    f"{name}|{item['headline'].lower()}|{hour_key}".encode()
+                ).hexdigest()[:16]
+                # sticky-max breaking flag, portable across SQLite + Postgres
+                # (Postgres MAX() is aggregate-only, so use CASE not MAX(a,b))
+                con.execute(
+                    """INSERT INTO live_onair
+                       (slug, channel, headline, hour_key, breaking,
+                        first_seen, last_seen)
+                       VALUES (?,?,?,?,?,?,?)
+                       ON CONFLICT (slug) DO UPDATE SET
+                         last_seen=excluded.last_seen,
+                         headline=excluded.headline,
+                         breaking=CASE WHEN live_onair.breaking=1
+                                       OR excluded.breaking=1 THEN 1 ELSE 0 END""",
+                    (slug, name, item["headline"], hour_key,
+                     1 if item["breaking"] else 0, now_iso, now_iso),
+                )
+                n_head += 1
+                n_break += 1 if item["breaking"] else 0
 
         cutoff = (now - timedelta(hours=KEEP_HOURS)).isoformat()
         con.execute("DELETE FROM live_onair WHERE last_seen < ?", (cutoff,))
