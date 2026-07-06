@@ -1,110 +1,128 @@
-// What's on air — hourly rival-TV coverage panel on the Story Desk.
-// Reads /api/live-coverage (fast, from stored clips); the Refresh button and a
-// light 10-min auto-refresh POST /api/live-coverage/refresh to pull fresh feeds.
+// "What's on air — by the hour" panel: what each news channel is broadcasting,
+// read from its LIVE stream title (not uploaded clips/articles). Shows only the
+// current hour by default; hour-band buttons load past hours on demand. Flags
+// channels that are BREAKING a story. Data: /api/live-coverage (fast) +
+// POST /api/live-coverage/refresh (polls the live streams now).
 
 const LiveCoverage = (() => {
-  let loadedOnce = false;
+  let data = null;          // last payload
+  let selectedKey = null;   // hour_key currently shown
   let autoTriggered = false;
 
-  // stable accent per channel so the eye can track a channel across hours
   const CHANNEL_COLORS = {
-    'NDTV 24x7':  '#D92D20',
-    'India Today': '#2563EB',
-    'Times Now':  '#7A5AF8',
-    'Republic TV': '#DC6803',
-    'CNN-News18': '#0E9384',
-    'WION':       '#DD2590',
+    'NDTV 24x7': '#D92D20', 'India Today': '#2563EB', 'Times Now': '#7A5AF8',
+    'Republic TV': '#DC6803', 'CNN-News18': '#0E9384', 'WION': '#DD2590',
   };
-  const FALLBACK = '#667085';
+  const accent = c => CHANNEL_COLORS[c] || '#667085';
 
-  function accent(channel) { return CHANNEL_COLORS[channel] || FALLBACK; }
+  function itemLine(it) {
+    const tag = it.breaking
+      ? '<span class="shrink-0 px-1.5 py-0.5 rounded bg-red6 text-white text-[9.5px] font-bold tracking-wide">BREAKING</span> '
+      : '';
+    return `<li class="text-[13px] leading-snug flex gap-1.5 items-start">
+      <span class="text-sub">·</span><span>${tag}${esc(it.headline)}</span></li>`;
+  }
 
   function channelBlock(c) {
     const color = accent(c.channel);
-    const extra = c.count > c.titles.length ? `<span class="text-sub text-[11.5px]">+${c.count - c.titles.length} more</span>` : '';
+    const brk = c.breaking
+      ? '<span class="px-1.5 py-0.5 rounded bg-red1 text-red8 text-[10px] font-bold">🔴 BREAKING</span>'
+      : '';
     return `
       <div class="pl-3 py-1" style="border-left:3px solid ${color}">
         <div class="flex items-center gap-2 mb-1">
           <span class="text-[12.5px] font-bold" style="color:${color}">${esc(c.channel)}</span>
-          <span class="text-[11px] text-sub">${c.count} ${c.count === 1 ? 'clip' : 'clips'}</span>
+          <span class="text-[11px] text-sub">${c.count} on air</span>
+          ${brk}
         </div>
-        <ul class="space-y-0.5">
-          ${c.titles.map(t => `<li class="text-[13px] leading-snug flex gap-1.5"><span class="text-sub">·</span><span>${esc(t)}</span></li>`).join('')}
-        </ul>
-        ${extra}
+        <ul class="space-y-0.5">${c.items.map(itemLine).join('')}</ul>
       </div>`;
   }
 
-  function hourBlock(h) {
-    return `
-      <div class="border border-line rounded-xl p-3.5">
-        <div class="flex items-center gap-2 mb-2.5">
-          <span class="px-2.5 py-0.5 rounded-md bg-navy text-white text-[12.5px] font-bold">${esc(h.label)}</span>
-          <span class="text-[11.5px] text-sub">${esc(h.date)}</span>
-          <span class="ml-auto text-[11.5px] text-sub">${h.total} ${h.total === 1 ? 'clip' : 'clips'} · ${h.channels.length} ${h.channels.length === 1 ? 'channel' : 'channels'}</span>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2">
-          ${h.channels.map(channelBlock).join('')}
-        </div>
-      </div>`;
+  function hourButtons() {
+    if (!data || !data.hours.length) return '';
+    return `<div class="flex items-center gap-1.5 flex-wrap mb-3">` +
+      data.hours.map(h => {
+        const isNow = h.hour_key === data.current_hour_key;
+        const sel = h.hour_key === selectedKey;
+        const label = isNow ? `● Now · ${esc(h.label)}` : esc(h.label);
+        const brkDot = h.breaking ? '<span class="ml-1 w-1.5 h-1.5 rounded-full bg-red6 inline-block align-middle"></span>' : '';
+        return `<button onclick="LiveCoverage.select('${esc(h.hour_key)}')"
+          class="px-3 py-1.5 rounded-lg text-[12.5px] font-semibold border ${sel ? 'bg-navy text-white border-navy' : 'bg-white text-sub border-line hover:border-ink'}">
+          ${label}${brkDot}</button>`;
+      }).join('') + `</div>`;
   }
 
-  function render(data) {
+  function render() {
     const body = document.getElementById('live-cov-body');
     const label = document.getElementById('live-cov-label');
     if (!body) return;
-    const hours = (data && data.hours) || [];
-    if (!hours.length) {
-      body.innerHTML = '<p class="text-sub text-[13.5px] py-6 text-center">No rival coverage captured yet — hit Refresh to pull the latest on-air feeds.</p>';
+
+    if (!data || !data.hours.length) {
+      body.innerHTML = '<p class="text-sub text-[13.5px] py-6 text-center">Nothing captured on the live streams yet — hit Refresh to read what\'s on air now.</p>';
     } else {
-      body.innerHTML = `<div class="space-y-3">${hours.map(hourBlock).join('')}</div>`;
+      if (!data.hours.some(h => h.hour_key === selectedKey)) {
+        selectedKey = (data.hours.find(h => h.hour_key === data.current_hour_key)
+                       || data.hours[0]).hour_key;
+      }
+      const hour = data.hours.find(h => h.hour_key === selectedKey);
+      const isNow = hour.hour_key === data.current_hour_key;
+      const heading = `${isNow ? 'On air now' : 'Aired'} · ${esc(hour.label)} <span class="text-sub font-normal">${esc(hour.date)}</span>`;
+      body.innerHTML = hourButtons() + `
+        <div class="border border-line rounded-xl p-3.5">
+          <div class="flex items-center gap-2 mb-2.5">
+            <span class="text-[13.5px] font-bold">${heading}</span>
+            <span class="ml-auto text-[11.5px] text-sub">${hour.total} on air · ${hour.channels.length} ${hour.channels.length === 1 ? 'channel' : 'channels'}${hour.breaking ? ` · <span class="text-red6 font-semibold">${hour.breaking} breaking</span>` : ''}</span>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2">
+            ${hour.channels.map(channelBlock).join('')}
+          </div>
+        </div>`;
     }
     if (label && data && data.generated_at) {
-      label.textContent = `Updated ${ageLabel(data.generated_at)} · ${data.clips_in_window || 0} clips`;
+      label.textContent = `Updated ${ageLabel(data.generated_at)}`;
     }
   }
 
+  function select(key) { selectedKey = key; render(); }
+
+  function apply(payload) { data = payload; render(); }
+
   async function load() {
     try {
-      const data = await (await fetch('/api/live-coverage')).json();
-      render(data);
-      loadedOnce = true;
-      // Serverless has no background poller, so a cold table is empty — pull
-      // fresh feeds once automatically the first time we find nothing.
+      apply(await (await fetch('/api/live-coverage')).json());
       if ((!data.hours || !data.hours.length) && !autoTriggered) {
         autoTriggered = true;
         refresh();
       }
-    } catch { /* leave the loading text; refresh button still works */ }
+    } catch { /* refresh button still works */ }
   }
 
   async function refresh() {
     const icon = document.getElementById('live-cov-icon');
     const label = document.getElementById('live-cov-label');
     if (icon) icon.textContent = '…';
-    if (label) label.textContent = 'pulling live feeds…';
+    if (label) label.textContent = 'reading live streams…';
     try {
-      const res = await fetch('/api/live-coverage/refresh', { method: 'POST' });
-      const data = await res.json();
-      render(data);
-      loadedOnce = true;
+      apply(await (await fetch('/api/live-coverage/refresh', { method: 'POST' })).json());
     } catch {
       if (label) label.textContent = 'refresh failed — try again';
     }
     if (icon) icon.textContent = '⟳';
   }
 
-  // Light auto-refresh while the Story Desk is visible (keyless YouTube feeds,
-  // no API budget). Skips when the tab is hidden or the desk isn't showing.
+  // Light auto-refresh while the Story Desk is visible (keyless, no budget).
   function autoTick() {
     const page = document.getElementById('page-stories');
-    const visible = page && !page.classList.contains('hidden');
-    if (visible && document.visibilityState === 'visible') refresh();
+    if (page && !page.classList.contains('hidden') && document.visibilityState === 'visible') {
+      // keep the current hour live; new hours appear as bands roll over
+      const keepNow = !selectedKey || (data && selectedKey === data.current_hour_key);
+      refresh().then(() => { if (keepNow && data) selectedKey = data.current_hour_key; render(); });
+    }
   }
 
-  // Paint from stored clips on load; kick the 10-min auto-refresh loop.
   load();
-  setInterval(autoTick, 10 * 60000);
+  setInterval(autoTick, 5 * 60000);
 
-  return { load, refresh, render };
+  return { load, refresh, select, render };
 })();

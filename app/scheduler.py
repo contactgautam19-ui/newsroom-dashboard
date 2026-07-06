@@ -44,8 +44,9 @@ def x_poll_job() -> None:
 def live_job() -> None:
     if not in_active_window():
         return
-    from app.news import live_monitor
+    from app.news import live_monitor, onair
     live_monitor.run_live_cycle()
+    onair.run_onair_cycle()
 
 
 def broker_job() -> None:

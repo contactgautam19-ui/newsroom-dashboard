@@ -140,6 +140,16 @@ CREATE TABLE IF NOT EXISTS live_coverage (
     fetched_at TEXT NOT NULL,
     terms TEXT NOT NULL DEFAULT '[]'           -- significant tokens for board matching
 );
+
+CREATE TABLE IF NOT EXISTS live_onair (
+    slug TEXT PRIMARY KEY,                     -- hash(channel|headline|hour_key)
+    channel TEXT NOT NULL,
+    headline TEXT NOT NULL,
+    hour_key TEXT NOT NULL,                    -- IST hour bucket 'YYYY-MM-DDTHH'
+    breaking INTEGER NOT NULL DEFAULT 0,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL
+);
 """
 
 

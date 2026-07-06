@@ -55,8 +55,9 @@ async def lifespan(app: FastAPI):
     if empty:
         asyncio.get_running_loop().run_in_executor(None, ingest.run_ingest_cycle)
     # warm the live rival-TV monitor so chips/keywords are ready at startup
-    from app.news import live_monitor
+    from app.news import live_monitor, onair
     asyncio.get_running_loop().run_in_executor(None, live_monitor.run_live_cycle)
+    asyncio.get_running_loop().run_in_executor(None, onair.run_onair_cycle)
     yield
     scheduler.shutdown()
 
@@ -245,27 +246,31 @@ def cron_tick(request: Request, secret: str = ""):
 @app.get("/api/cron/live")
 def cron_live(request: Request, secret: str = ""):
     _require_cron(secret, request)
-    from app.news import live_monitor
-    return live_monitor.run_live_cycle()
+    from app.news import live_monitor, onair
+    clips = live_monitor.run_live_cycle()
+    air = onair.run_onair_cycle()
+    return {"clips": clips, "onair": air}
 
 
 @app.get("/api/live-coverage")
-def live_coverage(hours: int = 8):
-    """What rival TV channels aired, bucketed by IST hour (reads stored clips —
-    fast, no network). Use POST /api/live-coverage/refresh to pull fresh feeds."""
-    from app.news import live_monitor
-    return live_monitor.hourly_coverage(hours_back=max(1, min(hours, 24)))
+def live_coverage(hours: int = 12):
+    """What each channel is airing, from its LIVE stream title, bucketed by IST
+    hour (reads stored on-air log — fast, no network). POST .../refresh polls
+    the live streams for the current minute."""
+    from app.news import onair
+    return onair.onair_hourly(hours_back=max(1, min(hours, 24)))
 
 
 @app.post("/api/live-coverage/refresh")
-async def live_coverage_refresh(hours: int = 8):
-    """Poll rival channels' live feeds, re-match the board, then return the
-    refreshed hourly digest. ~6 keyless HTTP fetches; safe to call on demand."""
-    from app.news import live_monitor
+async def live_coverage_refresh(hours: int = 12):
+    """Poll each channel's live-stream title now, record the current on-air
+    headlines, then return the refreshed hourly digest. Keyless oEmbed fetches;
+    safe to call on demand."""
+    from app.news import onair
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, live_monitor.run_live_cycle)
+    await loop.run_in_executor(None, onair.run_onair_cycle)
     return await loop.run_in_executor(
-        None, lambda: live_monitor.hourly_coverage(hours_back=max(1, min(hours, 24)))
+        None, lambda: onair.onair_hourly(hours_back=max(1, min(hours, 24)))
     )
 
 

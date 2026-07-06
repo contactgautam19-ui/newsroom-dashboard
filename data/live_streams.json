@@ -1,0 +1,8 @@
+[
+  {"name": "India Today", "source": "youtube", "video_id": "sYZtOFzM78M"},
+  {"name": "NDTV 24x7",   "source": "youtube", "video_id": "Ex8VcIn_8IQ"},
+  {"name": "Republic TV", "source": "youtube", "video_id": "FHVemxB6cU0"},
+  {"name": "CNN-News18",  "source": "youtube", "video_id": "Owi9__uQZN4"},
+  {"name": "WION",        "source": "youtube", "video_id": "3yJ3ohHb3dM"},
+  {"name": "Times Now",   "source": "web-ocr", "url": "https://www.timesnownews.com/live-tv"}
+]
