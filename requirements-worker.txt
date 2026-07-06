@@ -1,0 +1,11 @@
+# Extra dependencies for the local on-air worker (live_worker.py).
+# NOT installed on Vercel — the worker runs on an always-on local machine.
+#
+#   pip install -r requirements-worker.txt
+#   playwright install chromium          # one-time browser download
+#
+# The --ocr Times Now cross-check also needs the tesseract binary on PATH:
+#   winget install UB-Mannheim.TesseractOCR   (approve the UAC prompt)
+# then add its install dir (e.g. C:\Program Files\Tesseract-OCR) to PATH.
+
+playwright>=1.40
