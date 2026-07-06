@@ -401,6 +401,28 @@ async def npro_retrieve(payload: dict = Body(...)):
     return {"topic": query, "summary": summary, "retrieved": retrieved}
 
 
+@app.post("/api/npro/chat")
+async def npro_chat(payload: dict = Body(...)):
+    """Editorial Intelligence chat. Desk questions ('what should lead?', 'what's
+    viral?') are answered from the live desk snapshot; topic questions also pull
+    fresh reporting and unlock the production formats."""
+    from app.npro import engine, retrieval
+    query = (payload.get("query") or "").strip()
+    if not query:
+        raise HTTPException(400, "query required")
+    loop = asyncio.get_running_loop()
+    desk_q = engine.is_desk_question(query)
+    retrieved: list = []
+    if not desk_q:
+        retrieved = await loop.run_in_executor(
+            None, lambda: retrieval.search_news(query))
+    answer = await loop.run_in_executor(
+        None, lambda: engine.editorial_answer(query, retrieved, payload.get("topic") or ""))
+    return {"mode": "desk" if desk_q else "story", "answer": answer,
+            "topic": None if desk_q else query, "retrieved": retrieved,
+            "has_key": engine.has_key()}
+
+
 @app.post("/api/npro/context")
 async def npro_context(payload: dict = Body(...)):
     """Get More Context: one fresh, non-duplicative angle."""

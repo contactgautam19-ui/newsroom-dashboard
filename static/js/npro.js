@@ -67,6 +67,31 @@ const NPro = (() => {
   }
   function msgAI(html) { clearTyping(); return bubble('ai', html); }
   function msgUser(text) { return bubble('user', esc(text)); }
+
+  // Markdown-lite renderer: **bold** headers, "- " bullets, paragraph spacing.
+  // The editorial engine emits this exact dialect; raw asterisks never show.
+  function mdlite(text) {
+    let h = esc(text).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+    const out = [];
+    let inList = false;
+    for (const ln of h.split('\n')) {
+      const t = ln.trim();
+      if (/^[-•] /.test(t)) {
+        if (!inList) { out.push('<ul class="space-y-1 my-1">'); inList = true; }
+        out.push(`<li class="flex gap-2"><span class="text-sub shrink-0">•</span><span>${t.slice(2)}</span></li>`);
+        continue;
+      }
+      if (inList) { out.push('</ul>'); inList = false; }
+      if (!t) continue;
+      if (/^<b>[^<]{2,60}<\/b>:?$/.test(t)) {
+        out.push(`<p class="font-bold text-navy mt-3 first:mt-0 mb-0.5">${t}</p>`);
+      } else {
+        out.push(`<p class="mb-1">${ln}</p>`);
+      }
+    }
+    if (inList) out.push('</ul>');
+    return out.join('');
+  }
   function aiTyping() {
     clearTyping();
     const w = document.createElement('div');
@@ -85,10 +110,10 @@ const NPro = (() => {
     S.usedAngles = []; S.seenUrls = new Set(); S.seenTitles = [];
     S.retrieved.forEach(a => { if (a.url) S.seenUrls.add(a.url); if (a.title) S.seenTitles.push(a.title); });
     if (data.has_key === false) setTitle(S.topic || 'N-Pro', 'Template mode — add an API key in Ops for live AI scripts');
-    else setTitle(S.topic || 'N-Pro', `${S.retrieved.length} sources · News-production assistant`);
+    else setTitle(S.topic || 'N-Pro', `${S.retrieved.length} sources · Editorial Intelligence Engine`);
     pushHistory(S.topic);
     const srcCount = S.retrieved.length;
-    msgAI(`${srcLine(srcCount)}${esc(data.summary || '')}`);
+    msgAI(`${srcLine(srcCount)}${mdlite(data.summary || '')}`);
     askFormat();
     loadIntel();
   }
@@ -244,7 +269,9 @@ const NPro = (() => {
   }
 
   function fmtScript(text) {
-    return esc(text).replace(/^([A-Z][A-Z0-9 ,'’\-\/&()]{2,}:)/gm, '<span class="font-bold text-navy">$1</span>');
+    return esc(text)
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/^([A-Z][A-Z0-9 ,'’\-\/&()]{2,}:)/gm, '<span class="font-bold text-navy">$1</span>');
   }
 
   function copyLast(btn) {
@@ -324,19 +351,60 @@ const NPro = (() => {
     ].filter(Boolean).join('') || '<p class="text-sub text-[12.5px]">No intelligence extracted yet.</p>';
   }
 
-  // ── free-form ask ────────────────────────────────────────────────────────────
-  async function ask() {
+  // ── free-form ask → Editorial Intelligence chat ──────────────────────────────
+  async function ask(preset) {
     const inp = document.getElementById('npro-input');
-    const q = (inp.value || '').trim();
+    const q = (preset || inp.value || '').trim();
     if (!q) return;
-    inp.value = ''; inp.style.height = 'auto';
+    if (!preset) { inp.value = ''; inp.style.height = 'auto'; }
+    hideSuggest();
     msgUser(q);
     aiTyping();
-    S.storyId = null; // free-form query is not tied to a board story
     let data;
-    try { data = await postJSON('/api/npro/retrieve', { query: q }); }
-    catch { return msgAI('I couldn’t retrieve that — try again.'); }
-    applyRetrieval(data, false);
+    try { data = await postJSON('/api/npro/chat', { query: q, topic: S.topic, story_id: S.storyId }); }
+    catch { return msgAI('I couldn’t reach the desk — try again.'); }
+    clearTyping();
+    if (data.mode === 'story' && (data.retrieved || []).length) {
+      // a news topic: adopt it as the session story and unlock the formats
+      S.storyId = null;
+      S.topic = data.topic || q;
+      S.retrieved = data.retrieved;
+      S.usedAngles = []; S.seenUrls = new Set(); S.seenTitles = [];
+      S.retrieved.forEach(a => { if (a.url) S.seenUrls.add(a.url); if (a.title) S.seenTitles.push(a.title); });
+      setTitle(S.topic, `${S.retrieved.length} sources · Editorial Intelligence Engine`);
+      pushHistory(S.topic);
+      msgAI(`${srcLine(S.retrieved.length)}${mdlite(data.answer || '')}`);
+      askFormat();
+      loadIntel();
+    } else {
+      msgAI(mdlite(data.answer || ''));
+    }
+  }
+
+  // ── standalone mode (sidebar tab) ────────────────────────────────────────────
+  const STARTERS = [
+    'Which stories should I pick at the top of the hour?',
+    'Which story is likely to go viral?',
+    'Which stories are trending on X right now?',
+    'Which stories could generate the highest views?',
+    'What are rival channels airing right now?',
+    'What are competitors covering that we are missing?',
+  ];
+
+  async function openStandalone() {
+    reset(null, '');
+    overlay().classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    thread().innerHTML = '';
+    setTitle('N-Pro', 'Editorial Intelligence Engine — ask the desk anything');
+    renderRecent();
+    if (!meta) { try { meta = await (await fetch('/api/npro/formats')).json(); } catch {} }
+    const chips = STARTERS.map(s =>
+      `<button data-q="${esc(s)}" onclick="NPro.ask(this.dataset.q)" class="px-3 py-2 rounded-xl text-[12.5px] font-medium border border-line bg-white hover:border-navy text-left">${esc(s)}</button>`).join('');
+    msgAI(`<p class="font-bold text-navy mb-1">Your editorial board is in session.</p>
+      <p class="mb-2.5">I'm watching the ranked board, the X desk, rival channels on air and viral velocity — ask me a desk question, or name any story to unpack it.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">${chips}</div>`);
+    document.getElementById('npro-input').focus();
   }
 
   // ── left rail ──────────────────────────────────────────────────────────────
@@ -363,15 +431,87 @@ const NPro = (() => {
   }
   function jattr(s) { return JSON.stringify(String(s)); }
 
-  // input: Enter to send, auto-grow
+  // ── autocomplete (google-style suggestions above the input) ─────────────────
+  let sugIndex = -1;
+
+  function sugPool() {
+    const stories = (window.StoryDesk?.stories || []).slice(0, 20)
+      .map(s => 'Unpack: ' + s.title);
+    return [...STARTERS, ...S.history, ...stories];
+  }
+
+  function showSuggest() {
+    const inp = document.getElementById('npro-input');
+    const box = document.getElementById('npro-suggest');
+    if (!inp || !box) return;
+    const q = inp.value.trim().toLowerCase();
+    const pool = sugPool();
+    const hits = (q
+      ? pool.filter(s => s.toLowerCase().includes(q) && s.toLowerCase() !== q)
+      : STARTERS
+    ).slice(0, 6);
+    if (!hits.length) return hideSuggest();
+    sugIndex = -1;
+    box.innerHTML = hits.map((s, i) =>
+      `<button data-i="${i}" data-s="${esc(s)}" onmousedown="event.preventDefault();NPro.pickSuggest(this.dataset.s)"
+        class="npro-sug block w-full text-left px-3.5 py-2 text-[13px] hover:bg-paper truncate">${esc(s)}</button>`).join('');
+    box.classList.remove('hidden');
+  }
+
+  function hideSuggest() {
+    const box = document.getElementById('npro-suggest');
+    if (box) { box.classList.add('hidden'); box.innerHTML = ''; }
+    sugIndex = -1;
+  }
+
+  function moveSuggest(dir) {
+    const items = [...document.querySelectorAll('#npro-suggest .npro-sug')];
+    if (!items.length) return false;
+    sugIndex = (sugIndex + dir + items.length) % items.length;
+    items.forEach((el, i) => el.classList.toggle('bg-paper', i === sugIndex));
+    return true;
+  }
+
+  function pickSuggest(text) {
+    const inp = document.getElementById('npro-input');
+    inp.value = text;
+    hideSuggest();
+    ask();
+  }
+
+  // input: Enter to send, arrows navigate suggestions, auto-grow
   window.addEventListener('DOMContentLoaded', () => {
     const inp = document.getElementById('npro-input');
     if (!inp) return;
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } });
-    inp.addEventListener('input', () => { inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 128) + 'px'; });
+    inp.addEventListener('keydown', e => {
+      const box = document.getElementById('npro-suggest');
+      const open = box && !box.classList.contains('hidden');
+      if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault(); moveSuggest(e.key === 'ArrowDown' ? 1 : -1); return;
+      }
+      if (open && e.key === 'Tab') {
+        const sel = document.querySelectorAll('#npro-suggest .npro-sug')[Math.max(sugIndex, 0)];
+        if (sel) { e.preventDefault(); inp.value = sel.dataset.s; hideSuggest(); return; }
+      }
+      if (e.key === 'Escape') { hideSuggest(); return; }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (open && sugIndex >= 0) {
+          const sel = document.querySelectorAll('#npro-suggest .npro-sug')[sugIndex];
+          if (sel) return pickSuggest(sel.dataset.s);
+        }
+        ask();
+      }
+    });
+    inp.addEventListener('input', () => {
+      inp.style.height = 'auto'; inp.style.height = Math.min(inp.scrollHeight, 128) + 'px';
+      showSuggest();
+    });
+    inp.addEventListener('focus', showSuggest);
+    inp.addEventListener('blur', () => setTimeout(hideSuggest, 150));
   });
 
-  return { open, close, toggleIntel, pickFormat, answer, answerEl, answerText,
-           showCustom, toggleMulti, finishMulti, addGuest, finishGuests, action,
-           moreContext, copyLast, ask };
+  return { open, openStandalone, close, toggleIntel, pickFormat, answer, answerEl,
+           answerText, showCustom, toggleMulti, finishMulti, addGuest, finishGuests,
+           action, moreContext, copyLast, ask, pickSuggest };
 })();

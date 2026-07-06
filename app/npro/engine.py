@@ -33,6 +33,40 @@ SYSTEM = (
     "- Suggest stronger editorial angles when useful."
 )
 
+# Editorial Intelligence Engine persona — used for chat answers and story
+# briefs. The internal editorial checklist (importance, lead-worthiness,
+# political/business significance, winners/losers, investigative & legal
+# angles, what-next) is reasoned through internally and woven into prose —
+# never displayed as a list of questions.
+EDITORIAL_SYSTEM = (
+    "You are N-Pro, the Editorial Intelligence Engine of a television newsroom — "
+    "a senior editorial board available 24/7. You think like a senior editor, "
+    "not a search engine.\n\n"
+    "INTERNAL ANALYSIS (do this silently for every story; NEVER print these "
+    "questions or any checklist): why the story matters; whether it should lead "
+    "the bulletin; what competitors are missing; political significance; "
+    "business impact; what happens next; who benefits and who loses; "
+    "investigative and legal angles; how to explain it to viewers.\n\n"
+    "EVIDENCE DISCIPLINE:\n"
+    "- Use ONLY the supplied reporting and desk data. Never fabricate sources, "
+    "quotes or numbers.\n"
+    "- Distinguish clearly: verified facts, official statements, expert "
+    "opinions, developing information, and label unconfirmed items (UNVERIFIED).\n"
+    "- Where evidence is incomplete, say so and recommend what to verify next.\n"
+    "- Surface multiple perspectives on contested issues.\n"
+    "- Ask ONE short clarifying question when the editor's intent is genuinely "
+    "unclear — otherwise just answer.\n\n"
+    "FORMAT (strict — the UI renders this):\n"
+    "- Open each short section with a **Bold Header** line (2-4 words).\n"
+    "- Under each header: 1-3 tight sentences or '- ' bullets. No # symbols, no "
+    "tables, no numbered question lists.\n"
+    "- When unpacking a story, the first section is **Executive Summary** and "
+    "it must be under 100 words.\n"
+    "- Recommendations must be decisive: name the story, give the one-line why.\n"
+    "- Keep the whole reply under ~220 words unless the editor asks for depth. "
+    "End with a one-line **Next Step**."
+)
+
 
 def _key() -> str:
     return settings_store.get_setting("anthropic_api_key", "") or ""
@@ -105,23 +139,97 @@ def _fill(instruction: str, params: dict) -> str:
         return instruction
 
 
-# ── summary ────────────────────────────────────────────────────────────────
+# ── editorial brief + chat ─────────────────────────────────────────────────
 
 def summarize(topic: str, retrieved: list[dict]) -> str:
+    """Editorial brief shown when a story is opened: **Executive Summary**
+    (<100 words) + the desk-informed call, in the clean bold-header format."""
     if not retrieved:
         return (f"I couldn't pull fresh reporting on “{topic}” right now. "
                 "You can still choose a format and I'll draft from what the desk has.")
-    user = (f"In 3-4 tight sentences, summarise the current state of this story for a "
-            f"TV producer. Topic: {topic}.\n\n{context_block(None, retrieved)}")
-    out = _call(SYSTEM, user, max_tokens=600)
+    desk = _safe_desk()
+    user = (f"An editor just opened this story: {topic}.\n\n"
+            f"{context_block(None, retrieved)}\n\n"
+            + (f"{desk}\n\n" if desk else "")
+            + "Produce the opening brief with exactly these sections:\n"
+              "**Executive Summary** — the story in under 100 words.\n"
+              "**The Call** — should this lead the bulletin right now? One decisive "
+              "line with the why (use the desk snapshot: scores, rivals, X trends).\n"
+              "**Watch Next** — 1-2 bullets on what develops next or must be verified.")
+    out = _call(EDITORIAL_SYSTEM, user, max_tokens=900)
     if out:
         return out
     # heuristic: lead summary + corroboration
     lead = retrieved[0]
     pubs = ", ".join(sorted({a["publisher"] for a in retrieved[:6] if a.get("publisher")}))
     base = lead.get("summary") or lead.get("title") or ""
-    return (f"{base}\n\nReported by {pubs or 'multiple outlets'}. "
-            "Pick a format below and I'll build the script.")
+    return (f"**Executive Summary**\n{base}\n\n**Sources**\nReported by "
+            f"{pubs or 'multiple outlets'}. Pick a format below and I'll build the script.")
+
+
+# question phrasings that are about OUR desk/board rather than a news topic
+_DESK_HINT = re.compile(
+    r"\b(pick|lead|bulletin|top of the hour|rundown|board|viral|trending|"
+    r"views|rivals?|competitors?|airing|missing|x desk|my stories|"
+    r"what should (i|we))\b", re.IGNORECASE)
+
+
+def is_desk_question(query: str) -> bool:
+    return bool(_DESK_HINT.search(query or ""))
+
+
+def _safe_desk() -> str:
+    try:
+        from app.npro.desk import desk_snapshot
+        return desk_snapshot()
+    except Exception:
+        return ""
+
+
+def editorial_answer(query: str, retrieved: list[dict], topic: str = "") -> str:
+    """Answer a free-form editorial question with desk data + reporting."""
+    desk = _safe_desk()
+    parts = []
+    if desk:
+        parts.append(desk)
+    if retrieved:
+        parts.append(context_block(None, retrieved))
+    parts.append(f"EDITOR'S QUESTION: {query}")
+    parts.append(
+        "Answer as the senior editorial board: decisive, specific, grounded in "
+        "the desk snapshot and reporting above. Recommend actual stories by name "
+        "where relevant.")
+    out = _call(EDITORIAL_SYSTEM, "\n\n".join(parts), max_tokens=1200)
+    if out:
+        return out
+    # keyless fallback: a clean heuristic answer from the board
+    return _heuristic_answer(query, retrieved)
+
+
+def _heuristic_answer(query: str, retrieved: list[dict]) -> str:
+    try:
+        from app.news import ingest
+        board = ingest.get_rundown(6)
+    except Exception:
+        board = []
+    lines = ["**Desk View** (template mode — add an API key in Ops for full analysis)"]
+    if board:
+        lines.append("")
+        lines.append("**Top Of The Board**")
+        for s in board[:5]:
+            extra = " · trending on X" if s.get("trend_boost", 0) > 0 else ""
+            rc = s.get("rival_coverage") or []
+            extra += f" · rivals airing ({', '.join(rc)})" if rc else ""
+            lines.append(f"- [{s.get('score', 0)}] {s.get('title', '')}{extra}")
+    if retrieved:
+        lines.append("")
+        lines.append("**Fresh Reporting**")
+        for a in retrieved[:4]:
+            lines.append(f"- {a.get('publisher', '')}: {a.get('title', '')}")
+    lines.append("")
+    lines.append("**Next Step**")
+    lines.append("Open any of these with Pick Story and I'll build the script.")
+    return "\n".join(lines)
 
 
 # ── generation ─────────────────────────────────────────────────────────────
