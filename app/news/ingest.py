@@ -97,6 +97,68 @@ def _dedup_key(title: str) -> str:
     return hashlib.sha1(" ".join(tokens).encode()).hexdigest()
 
 
+# Near-duplicate (same-event) detection. The exact dedup_key above only merges
+# identical word-sets, so three differently-worded takes on the same event
+# ("Wayanad landslide kills 12", "Death toll rises in Wayanad landslide", …)
+# each got their own board row. We collapse them by significant-token overlap.
+_DEDUP_STOP = _JUNK_STOPWORDS | _MONTH_NAMES | _WEEKDAY_NAMES | {
+    "over", "after", "amid", "into", "from", "with", "says", "said", "dead",
+    "kills", "killed", "live", "video", "watch", "big", "top", "new", "how",
+    "why", "what", "who", "amid", "case", "man", "day", "set", "get", "may",
+    "will", "can", "not", "out", "now", "his", "her", "was", "are", "has",
+    "amid", "as", "on", "in", "of", "to", "the", "and", "for",
+}
+
+
+def _sig_tokens(title: str) -> set[str]:
+    """Distinctive tokens for same-event matching (place/entity words survive,
+    filler drops)."""
+    return {
+        w for w in _token_re.sub("", (title or "").lower()).split()
+        if w.isalpha() and len(w) >= 4 and w not in _DEDUP_STOP
+    }
+
+
+def _same_event(a: set[str], b: set[str]) -> bool:
+    """True when two titles are the same story: they share >=2 distinctive
+    tokens and those cover at least half the shorter title's key words."""
+    if len(a) < 2 or len(b) < 2:
+        return False
+    shared = a & b
+    if len(shared) < 2:
+        return False
+    return len(shared) / min(len(a), len(b)) >= 0.5
+
+
+def _collapse_duplicates(con) -> int:
+    """Merge same-event stories already on the board into one row: keep the
+    highest-scored take, fold the others' sources into it (so the survivor shows
+    the corroboration that makes a big story look big), and retire the rest."""
+    rows = db.rows_to_dicts(con.execute(
+        "SELECT id, title, sources FROM stories WHERE active=1 "
+        "ORDER BY score DESC, id ASC").fetchall())
+    kept: list[dict] = []
+    removed = 0
+    for r in rows:
+        toks = _sig_tokens(r["title"])
+        survivor = next((k for k in kept
+                         if len(toks) >= 2 and _same_event(toks, k["tokens"])), None)
+        if survivor is None:
+            kept.append({"id": r["id"], "tokens": toks,
+                         "sources": set(r["sources"] or []), "grew": False})
+        else:
+            before = len(survivor["sources"])
+            survivor["sources"] |= set(r["sources"] or [])
+            survivor["grew"] = survivor["grew"] or len(survivor["sources"]) > before
+            con.execute("UPDATE stories SET active=0 WHERE id=?", (r["id"],))
+            removed += 1
+    for k in kept:
+        if k["grew"]:
+            con.execute("UPDATE stories SET sources=? WHERE id=?",
+                        (json.dumps(sorted(k["sources"])), k["id"]))
+    return removed
+
+
 def _related_publishers(summary_html: str) -> list[str]:
     """Publisher names from the 'related coverage' font tags in GN summaries."""
     return re.findall(r'<font color="#6f6f6f">([^<]+)</font>', summary_html or "")
@@ -152,6 +214,18 @@ def _persist_story(con, story, score, confidence, verdict, now_iso) -> tuple[int
         "SELECT id, sources, base_score, stale_cycles FROM stories WHERE dedup_key = ?",
         (key,),
     ).fetchone()
+
+    # No exact-title match: check whether this is another take on a story
+    # already on the board (same event, different wording) and merge into it.
+    if not existing:
+        new_tokens = _sig_tokens(story.raw.title)
+        if len(new_tokens) >= 2:
+            for row in con.execute(
+                    "SELECT id, title, sources, base_score, stale_cycles "
+                    "FROM stories WHERE active=1").fetchall():
+                if _same_event(new_tokens, _sig_tokens(row["title"])):
+                    existing = row
+                    break
 
     if existing:
         prev_sources = set(json.loads(existing["sources"]))
@@ -298,6 +372,9 @@ def run_ingest_cycle(manual: bool = False) -> dict:
         for row in con.execute("SELECT id, title FROM stories WHERE active=1"):
             if is_junk_title(row["title"]):
                 con.execute("UPDATE stories SET active=0 WHERE id=?", (row["id"],))
+
+        # collapse same-event duplicates already on the board into one row
+        feed_stats["deduped"] = _collapse_duplicates(con)
 
         # stories not in this cycle age one stale cycle (repetitive decay) —
         # at most once per hour regardless of refresh cadence, capped total
