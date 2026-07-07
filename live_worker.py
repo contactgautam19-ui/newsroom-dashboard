@@ -98,8 +98,9 @@ def main() -> None:
     from app import config, db
     db.init_db()
     target = "Supabase" if db.IS_PG else f"SQLite ({config.DB_PATH})"
-    print(f"on-air worker → {target} · every {args.interval} min"
-          f"{' · +Times Now OCR' if args.ocr else ''}", flush=True)
+    # ASCII only: stdout may be a cp1252-encoded log file on Windows
+    print(f"on-air worker -> {target} | every {args.interval} min"
+          f"{' | +Times Now OCR' if args.ocr else ''}", flush=True)
 
     while True:
         try:
