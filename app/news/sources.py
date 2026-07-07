@@ -18,9 +18,9 @@ import httpx
 from app import config
 from app.news.models import RawArticle
 
-ITEMS_PER_FEED = 3
+ITEMS_PER_FEED = 5
 FEED_TIMEOUT = 8
-MAX_WORKERS = 12
+MAX_WORKERS = 16
 CLUSTER_MIN_SHARED = 3     # shared significant tokens to merge two headlines
 CLUSTER_OVERLAP = 0.6      # ...or this fraction of the smaller token set
 
@@ -51,11 +51,16 @@ def _fetch_feed(source: dict) -> list[RawArticle]:
     resp.raise_for_status()
     feed = feedparser.parse(resp.content)
 
+    via_google = source.get("via") == "google"
     articles = []
     for entry in feed.entries[:ITEMS_PER_FEED]:
         title = (entry.get("title") or "").strip()
         if not title:
             continue
+        # Google News site: feeds append " - Publisher" to every headline; the
+        # publisher is already known (it's this source), so strip the suffix.
+        if via_google and " - " in title:
+            title = title.rsplit(" - ", 1)[0].strip()
         published = entry.get("published_parsed") or entry.get("updated_parsed")
         published_iso = (datetime(*published[:6], tzinfo=timezone.utc).isoformat()
                          if published else datetime.now(timezone.utc).isoformat())
@@ -67,6 +72,7 @@ def _fetch_feed(source: dict) -> list[RawArticle]:
             summary=entry.get("summary", ""),
             category_hint=source.get("category_hint", ""),
             source_rank=source.get("rank", 99),
+            source_country=source.get("country", "INTL"),
         ))
     return articles
 

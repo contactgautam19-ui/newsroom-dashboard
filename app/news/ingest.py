@@ -187,6 +187,51 @@ def _collapse_duplicates(con) -> int:
     return removed
 
 
+# India-first editorial priority. This board serves an Indian TV desk, so a
+# fresh story an Indian outlet is carrying should outrank a foreign wire item of
+# similar base weight. Brand substrings match both the curated 50-source names
+# and the canonical publisher names Google News returns in the discovery lane.
+INDIA_SOURCE_BONUS = 12
+_INDIAN_BRANDS = {
+    "ndtv", "hindustan times", "indian express", "times of india", "news18",
+    "india today", "ani", "press trust", "pti", "dainik bhaskar",
+    "business standard", "economic times", "livemint", "mint", "financial express",
+    "cnbc tv18", "cnbc-tv18", "bq prime", "ndtv profit", "news minute", "the wire",
+    "scroll", "quint", "firstpost", "deccan herald", "new indian express",
+    "mathrubhumi", "onmanorama", "deccan chronicle", "the hindu", "tribune",
+    "anandabazar", "outlook", "the week", "medianama", "cricbuzz", "moneycontrol",
+    "the ken", "entrackr", "swarajya", "live law", "livelaw", "zee news",
+    "aaj tak", "abp", "wion", "republic", "opindia", "the print", "theprint",
+    "free press journal", "asian news international",
+}
+
+
+def _indian_source_hit(publishers: set[str]) -> str | None:
+    """Return the first Indian outlet found among a story's publishers, or None."""
+    for p in publishers:
+        pl = (p or "").lower()
+        for brand in _INDIAN_BRANDS:
+            if brand in pl:
+                return p
+    return None
+
+
+def _india_priority_entry(story) -> dict | None:
+    """Score entry that lifts stories an Indian outlet is carrying (or that
+    were fetched from an Indian-country source), so they lead the rundown."""
+    pubs = {story.raw.publisher, *story.sources, *(story.raw.corroborators or [])}
+    hit = _indian_source_hit({p for p in pubs if p})
+    if not hit and getattr(story.raw, "source_country", "INTL") != "IN":
+        return None
+    label = hit or story.raw.publisher or "Indian source"
+    return {
+        "variable": "india_priority",
+        "max_points": INDIA_SOURCE_BONUS,
+        "points": INDIA_SOURCE_BONUS,
+        "evidence": [f"Carried by Indian outlet ({label}) — Indian-audience priority"],
+    }
+
+
 def _related_publishers(summary_html: str) -> list[str]:
     """Publisher names from the 'related coverage' font tags in GN summaries."""
     return re.findall(r'<font color="#6f6f6f">([^<]+)</font>', summary_html or "")
@@ -368,6 +413,13 @@ def run_ingest_cycle(manual: bool = False) -> dict:
             score["total"] = min(100, score["total"] + entry["points"])
         except Exception:
             pass  # audience layer must never block the cycle
+        try:
+            ind = _india_priority_entry(story)
+            if ind:
+                score["breakdown"].append(ind)
+                score["total"] = min(100, score["total"] + ind["points"])
+        except Exception:
+            pass  # India-priority layer must never block the cycle
         scored.append((score, story))
     scored.sort(key=lambda pair: pair[0]["total"], reverse=True)
     articles = scored[: config.STORIES_PER_CYCLE]

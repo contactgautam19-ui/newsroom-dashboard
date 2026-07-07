@@ -7,6 +7,8 @@
     "rss_url": "https://feeds.feedburner.com/ndtvnews-top-stories",
     "active": true,
     "category_hint": "National",
+    "country": "IN",
+    "via": "direct",
     "note": null
   },
   {
@@ -14,10 +16,12 @@
     "source": "Hindustan Times",
     "velocity_tier": "Very Low (2-4m)",
     "focus": "National / Metro News",
-    "rss_url": "https://www.hindustantimes.com/feeds/rss/topnews/rssfeed.xml",
+    "rss_url": "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "direct",
+    "note": "fixed 2026-07-07 (old topnews path 200/empty)"
   },
   {
     "rank": 3,
@@ -27,6 +31,8 @@
     "rss_url": "https://indianexpress.com/feed/",
     "active": true,
     "category_hint": "Politics",
+    "country": "IN",
+    "via": "direct",
     "note": null
   },
   {
@@ -37,6 +43,8 @@
     "rss_url": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
     "active": true,
     "category_hint": "National",
+    "country": "IN",
+    "via": "direct",
     "note": null
   },
   {
@@ -44,10 +52,12 @@
     "source": "News18 English",
     "velocity_tier": "Low (3-5m)",
     "focus": "National / Explainer",
-    "rss_url": "https://www.news18.com/rss/top-stories.xml",
+    "rss_url": "https://www.news18.com/commonfeeds/v1/eng/rss/india.xml",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "direct",
+    "note": "fixed 2026-07-07 (old top-stories.xml 200/empty)"
   },
   {
     "rank": 6,
@@ -57,6 +67,8 @@
     "rss_url": "https://www.indiatoday.in/rss/home",
     "active": true,
     "category_hint": "National",
+    "country": "IN",
+    "via": "direct",
     "note": null
   },
   {
@@ -64,30 +76,36 @@
     "source": "ANI News",
     "velocity_tier": "Ultra-Low Wire (<1m)",
     "focus": "Agency Wire Feed",
-    "rss_url": null,
-    "active": false,
+    "rss_url": "https://news.google.com/rss/search?q=site:aninews.in&hl=en-IN&gl=IN&ceid=IN:en",
+    "active": true,
     "category_hint": "National",
-    "note": "no direct RSS (Direct API / Scraping Endpoint) — needs API/scraper integration"
+    "country": "IN",
+    "via": "google",
+    "note": "no direct RSS; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 8,
     "source": "PTI (Press Trust of India)",
     "velocity_tier": "Ultra-Low Wire (<1m)",
     "focus": "Agency Wire Feed",
-    "rss_url": null,
-    "active": false,
+    "rss_url": "https://news.google.com/rss/search?q=site:ptinews.com&hl=en-IN&gl=IN&ceid=IN:en",
+    "active": true,
     "category_hint": "National",
-    "note": "no direct RSS (Direct API / Subscription Hook) — needs API/scraper integration"
+    "country": "IN",
+    "via": "google",
+    "note": "no direct RSS; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 9,
     "source": "Dainik Bhaskar (English)",
     "velocity_tier": "Moderate (5-8m)",
     "focus": "Regional / State Hubs",
-    "rss_url": "https://www.bhaskar.com/rss/",
+    "rss_url": "https://news.google.com/rss/search?q=site:bhaskar.com&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "google",
+    "note": "direct feed dead; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 10,
@@ -97,6 +115,8 @@
     "rss_url": "https://www.business-standard.com/rss/home_page_top_stories.rss",
     "active": true,
     "category_hint": "Business",
+    "country": "IN",
+    "via": "direct",
     "note": null
   },
   {
@@ -107,6 +127,8 @@
     "rss_url": "https://economictimes.indiatimes.com/rssfeedstopstories.cms",
     "active": true,
     "category_hint": "Business",
+    "country": "IN",
+    "via": "direct",
     "note": null
   },
   {
@@ -117,6 +139,8 @@
     "rss_url": "https://www.livemint.com/rss/news",
     "active": true,
     "category_hint": "Business",
+    "country": "IN",
+    "via": "direct",
     "note": null
   },
   {
@@ -124,130 +148,156 @@
     "source": "Financial Express",
     "velocity_tier": "Moderate (5-7m)",
     "focus": "Industrial Policy / Markets",
-    "rss_url": "https://www.financialexpress.com/feed/",
+    "rss_url": "https://news.google.com/rss/search?q=site:financialexpress.com&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "Business",
-    "note": null
+    "country": "IN",
+    "via": "google",
+    "note": "direct feed empty; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 14,
     "source": "CNBC TV18",
     "velocity_tier": "Ultra-Low (<2m)",
     "focus": "Stock Market / Live Ticker",
-    "rss_url": "https://www.cnbctv18.com/rss/market.xml",
+    "rss_url": "https://news.google.com/rss/search?q=site:cnbctv18.com&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
-    "category_hint": "National",
-    "note": null
+    "category_hint": "Business",
+    "country": "IN",
+    "via": "google",
+    "note": "direct feed dead; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 15,
-    "source": "Bloomberg Quint / BQ Prime",
+    "source": "BQ Prime / NDTV Profit",
     "velocity_tier": "Very Low (2-4m)",
     "focus": "Business Intelligence",
-    "rss_url": null,
-    "active": false,
+    "rss_url": "https://news.google.com/rss/search?q=site:ndtvprofit.com&hl=en-IN&gl=IN&ceid=IN:en",
+    "active": true,
     "category_hint": "Business",
-    "note": "no direct RSS (Scraping Dependent) — needs API/scraper integration"
+    "country": "IN",
+    "via": "google",
+    "note": "no direct RSS; tracked via Google News site: search (BQ Prime is now NDTV Profit) 2026-07-07"
   },
   {
     "rank": 16,
     "source": "The News Minute",
     "velocity_tier": "Targeted (Variable)",
     "focus": "South India Bureau",
-    "rss_url": "https://www.thenewsminute.com/news.xml",
+    "rss_url": "https://www.thenewsminute.com/feed",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "direct",
+    "note": "fixed 2026-07-07 (old news.xml 404)"
   },
   {
     "rank": 17,
     "source": "The Wire",
     "velocity_tier": "Deliberate (10m+)",
     "focus": "Public Policy / Analysis",
-    "rss_url": "https://thewire.in/rss",
+    "rss_url": "https://news.google.com/rss/search?q=site:thewire.in&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "Politics",
-    "note": null
+    "country": "IN",
+    "via": "google",
+    "note": "direct feed empty; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 18,
     "source": "Scroll.in",
     "velocity_tier": "Moderate (5-10m)",
     "focus": "Culture / Politics",
-    "rss_url": "https://scroll.in/feed",
+    "rss_url": "https://feeds.feedburner.com/ScrollinArticles.rss",
     "active": true,
     "category_hint": "Politics",
-    "note": null
+    "country": "IN",
+    "via": "direct",
+    "note": "fixed 2026-07-07 (feedburner mirror; scroll.in/feed 200/empty)"
   },
   {
     "rank": 19,
     "source": "The Quint",
     "velocity_tier": "Low (3-5m)",
     "focus": "Youth Centric / General",
-    "rss_url": "https://www.thequint.com/rss",
+    "rss_url": "https://www.thequint.com/stories.rss",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "direct",
+    "note": "fixed 2026-07-07 (old /rss 404)"
   },
   {
     "rank": 20,
     "source": "Firstpost",
     "velocity_tier": "Moderate (5-8m)",
     "focus": "Global Affairs / Commentary",
-    "rss_url": "https://www.firstpost.com/rss/news.xml",
+    "rss_url": "https://www.firstpost.com/commonfeeds/v1/mfp/rss/india.xml",
     "active": true,
-    "category_hint": "International",
-    "note": null
+    "category_hint": "National",
+    "country": "IN",
+    "via": "direct",
+    "note": "fixed 2026-07-07 (old news.xml empty)"
   },
   {
     "rank": 21,
     "source": "Deccan Herald",
     "velocity_tier": "Moderate (5-7m)",
     "focus": "Karnataka / National",
-    "rss_url": "https://www.deccanherald.com/rss/home.rss",
+    "rss_url": "https://news.google.com/rss/search?q=site:deccanherald.com&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "google",
+    "note": "direct feed 500; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 22,
     "source": "The New Indian Express",
     "velocity_tier": "Moderate (5-7m)",
     "focus": "Southern States / Center",
-    "rss_url": "https://www.newindianexpress.com/States/rssfeed.xml",
+    "rss_url": "https://www.newindianexpress.com/feed",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "direct",
+    "note": "fixed 2026-07-07 (old States/rssfeed.xml 404)"
   },
   {
     "rank": 23,
     "source": "Mathrubhumi English",
     "velocity_tier": "Moderate (8-10m)",
     "focus": "Kerala / Regional Civic",
-    "rss_url": "https://english.mathrubhumi.com/rss",
+    "rss_url": "https://news.google.com/rss/search?q=site:english.mathrubhumi.com&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "google",
+    "note": "direct feed dead; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 24,
     "source": "Onmanorama",
     "velocity_tier": "Moderate (6-9m)",
     "focus": "Kerala Regional / Diaspora",
-    "rss_url": "https://www.onmanorama.com/rss/news.xml",
+    "rss_url": "https://news.google.com/rss/search?q=site:onmanorama.com&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "google",
+    "note": "direct feed 404; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 25,
     "source": "Deccan Chronicle",
     "velocity_tier": "Moderate (8-12m)",
     "focus": "Telangana / Andhra Pradesh",
-    "rss_url": "https://www.deccanchronicle.com/rss",
+    "rss_url": "https://www.deccanchronicle.com/rss_feed/",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "direct",
+    "note": "fixed 2026-07-07 (old /rss 404)"
   },
   {
     "rank": 26,
@@ -257,6 +307,8 @@
     "rss_url": "https://www.thehindu.com/feeder/default.rss",
     "active": true,
     "category_hint": "National",
+    "country": "IN",
+    "via": "direct",
     "note": null
   },
   {
@@ -264,70 +316,84 @@
     "source": "The Tribune India",
     "velocity_tier": "Moderate (10m+)",
     "focus": "Punjab / Haryana / HP / J&K",
-    "rss_url": "https://www.tribuneindia.com/rss/feed",
+    "rss_url": "https://news.google.com/rss/search?q=site:tribuneindia.com&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "google",
+    "note": "direct feed 403; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 28,
     "source": "Anandabazar Patrika (Eng)",
     "velocity_tier": "Moderate (8-10m)",
     "focus": "West Bengal Regional Hub",
-    "rss_url": null,
-    "active": false,
+    "rss_url": "https://news.google.com/rss/search?q=site:anandabazar.com&hl=en-IN&gl=IN&ceid=IN:en",
+    "active": true,
     "category_hint": "National",
-    "note": "no direct RSS (Scraping Dependent) — needs API/scraper integration"
+    "country": "IN",
+    "via": "google",
+    "note": "no direct RSS; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 29,
     "source": "Outlook India",
     "velocity_tier": "Moderate (10m+)",
     "focus": "Current Affairs / Longform",
-    "rss_url": "https://www.outlookindia.com/rss/home",
+    "rss_url": "https://news.google.com/rss/search?q=site:outlookindia.com&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "google",
+    "note": "direct feed 404; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 30,
     "source": "The Week",
     "velocity_tier": "Deliberate (10m+)",
     "focus": "National / Analytical",
-    "rss_url": "https://www.theweek.in/rss.xml",
+    "rss_url": "https://news.google.com/rss/search?q=site:theweek.in&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "National",
-    "note": null
+    "country": "IN",
+    "via": "google",
+    "note": "direct feed 404; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 31,
     "source": "Reuters",
     "velocity_tier": "Ultra-Low Wire (<1m)",
     "focus": "Global Markets & Breaking Wire",
-    "rss_url": "https://www.reutersagency.com/feed/",
+    "rss_url": "https://news.google.com/rss/search?q=site:reuters.com&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "Business",
-    "note": null
+    "country": "INTL",
+    "via": "google",
+    "note": "reutersagency feed 404; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 32,
     "source": "Associated Press (AP)",
     "velocity_tier": "Ultra-Low Wire (<1m)",
     "focus": "Global Verification Blueprint",
-    "rss_url": "https://apnews.com/feed",
+    "rss_url": "https://news.google.com/rss/search?q=site:apnews.com&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "International",
-    "note": null
+    "country": "INTL",
+    "via": "google",
+    "note": "apnews/feed 404; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 33,
     "source": "Bloomberg News",
     "velocity_tier": "Ultra-Low (<2m)",
     "focus": "Global Finance & Macro Economy",
-    "rss_url": null,
-    "active": false,
+    "rss_url": "https://news.google.com/rss/search?q=site:bloomberg.com&hl=en-IN&gl=IN&ceid=IN:en",
+    "active": true,
     "category_hint": "Business",
-    "note": "no direct RSS (Direct Terminal Stream Sync) — needs API/scraper integration"
+    "country": "INTL",
+    "via": "google",
+    "note": "no direct RSS; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 34,
@@ -336,7 +402,9 @@
     "focus": "International Ingestion Bureau",
     "rss_url": "https://feeds.bbci.co.uk/news/world/rss.xml",
     "active": true,
-    "category_hint": "National",
+    "category_hint": "International",
+    "country": "INTL",
+    "via": "direct",
     "note": null
   },
   {
@@ -347,6 +415,8 @@
     "rss_url": "http://rss.cnn.com/rss/edition.rss",
     "active": true,
     "category_hint": "International",
+    "country": "INTL",
+    "via": "direct",
     "note": null
   },
   {
@@ -357,6 +427,8 @@
     "rss_url": "https://www.aljazeera.com/xml/rss/all.xml",
     "active": true,
     "category_hint": "International",
+    "country": "INTL",
+    "via": "direct",
     "note": null
   },
   {
@@ -367,6 +439,8 @@
     "rss_url": "https://rss.dw.com/xml/rss-en-all",
     "active": true,
     "category_hint": "International",
+    "country": "INTL",
+    "via": "direct",
     "note": null
   },
   {
@@ -377,6 +451,8 @@
     "rss_url": "https://www.france24.com/en/rss",
     "active": true,
     "category_hint": "International",
+    "country": "INTL",
+    "via": "direct",
     "note": null
   },
   {
@@ -387,6 +463,8 @@
     "rss_url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
     "active": true,
     "category_hint": "Technology",
+    "country": "INTL",
+    "via": "direct",
     "note": null
   },
   {
@@ -397,6 +475,8 @@
     "rss_url": "https://www.scmp.com/rss/91/feed",
     "active": true,
     "category_hint": "International",
+    "country": "INTL",
+    "via": "direct",
     "note": null
   },
   {
@@ -407,6 +487,8 @@
     "rss_url": "https://techcrunch.com/feed/",
     "active": true,
     "category_hint": "Technology",
+    "country": "INTL",
+    "via": "direct",
     "note": null
   },
   {
@@ -417,6 +499,8 @@
     "rss_url": "https://www.medianama.com/feed/",
     "active": true,
     "category_hint": "Technology",
+    "country": "IN",
+    "via": "direct",
     "note": null
   },
   {
@@ -427,6 +511,8 @@
     "rss_url": "https://www.theverge.com/rss/index.xml",
     "active": true,
     "category_hint": "Technology",
+    "country": "INTL",
+    "via": "direct",
     "note": null
   },
   {
@@ -434,20 +520,24 @@
     "source": "ESPNCricinfo",
     "velocity_tier": "Ultra-Low (<1m Match Data)",
     "focus": "Cricket Alerts & Ball Ingest",
-    "rss_url": "https://www.espncricinfo.com/rss/content/story/feeds/index.xml",
+    "rss_url": "https://www.espncricinfo.com/rss/content/story/feeds/0.xml",
     "active": true,
     "category_hint": "Sports",
-    "note": null
+    "country": "INTL",
+    "via": "direct",
+    "note": "fixed 2026-07-07 (old index.xml 404)"
   },
   {
     "rank": 45,
     "source": "Cricbuzz",
     "velocity_tier": "Ultra-Low (<2m Live Info)",
     "focus": "Sports Ticker Sync",
-    "rss_url": null,
-    "active": false,
+    "rss_url": "https://news.google.com/rss/search?q=site:cricbuzz.com&hl=en-IN&gl=IN&ceid=IN:en",
+    "active": true,
     "category_hint": "Sports",
-    "note": "no direct RSS (Scraping Dependent) — needs API/scraper integration"
+    "country": "IN",
+    "via": "google",
+    "note": "no direct RSS; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 46,
@@ -457,6 +547,8 @@
     "rss_url": "https://www.moneycontrol.com/rss/latestnews.xml",
     "active": true,
     "category_hint": "Business",
+    "country": "IN",
+    "via": "direct",
     "note": null
   },
   {
@@ -464,20 +556,24 @@
     "source": "The Ken",
     "velocity_tier": "Analytical Subscription",
     "focus": "Deep Tech / Corporate Profiles",
-    "rss_url": null,
-    "active": false,
+    "rss_url": "https://news.google.com/rss/search?q=site:the-ken.com&hl=en-IN&gl=IN&ceid=IN:en",
+    "active": true,
     "category_hint": "Business",
-    "note": "no direct RSS (Direct API Webhook Only) — needs API/scraper integration"
+    "country": "IN",
+    "via": "google",
+    "note": "no direct RSS; tracked via Google News site: search 2026-07-07"
   },
   {
     "rank": 48,
     "source": "Entrackr",
     "velocity_tier": "Moderate (5-10m)",
     "focus": "Indian Startup Ecosystem M&A",
-    "rss_url": "https://entrackr.com/feed/",
+    "rss_url": "https://entrackr.com/rss",
     "active": true,
     "category_hint": "Business",
-    "note": null
+    "country": "IN",
+    "via": "direct",
+    "note": "fixed 2026-07-07 (old /feed 404)"
   },
   {
     "rank": 49,
@@ -487,6 +583,8 @@
     "rss_url": "https://swarajyamag.com/feed",
     "active": true,
     "category_hint": "National",
+    "country": "IN",
+    "via": "direct",
     "note": null
   },
   {
@@ -494,9 +592,11 @@
     "source": "Live Law",
     "velocity_tier": "Very Low (2-4m)",
     "focus": "Supreme Court / High Court Tickers",
-    "rss_url": "https://www.livelaw.in/rss",
+    "rss_url": "https://news.google.com/rss/search?q=site:livelaw.in&hl=en-IN&gl=IN&ceid=IN:en",
     "active": true,
     "category_hint": "Legal",
-    "note": null
+    "country": "IN",
+    "via": "google",
+    "note": "direct feed 404; tracked via Google News site: search 2026-07-07"
   }
 ]
