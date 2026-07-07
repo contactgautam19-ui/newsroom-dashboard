@@ -73,8 +73,9 @@ GOOGLE_TRENDS_RSS = os.getenv(
     "GOOGLE_TRENDS_RSS", "https://trends.google.com/trending/rss?geo=IN"
 )
 DISCOVERY_KEYWORDS = _int("DISCOVERY_KEYWORDS", 8)   # keywords searched per cycle
-FRESHNESS_HOURS = _int("FRESHNESS_HOURS", 3)         # drop new candidates older than this
-RETIRE_HOURS = _int("RETIRE_HOURS", 12)              # retire board stories older than this
+FRESHNESS_HOURS = _int("FRESHNESS_HOURS", 1)         # drop new candidates older than this
+RETIRE_HOURS = _int("RETIRE_HOURS", 2)               # retire board stories older than this
+BOARD_WINDOW_HOURS = _int("BOARD_WINDOW_HOURS", 1)   # board shows only stories newer than this (strict)
 X_TERM_WINDOW_MIN = _int("X_TERM_WINDOW_MIN", 30)    # X-desk hot-term lookback
 
 # Ranking / broker thresholds (from the PRD and Master Prompt)

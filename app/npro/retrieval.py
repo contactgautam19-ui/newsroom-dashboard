@@ -73,6 +73,15 @@ def search_news(query: str, limit: int = 8) -> list[dict]:
         return []
 
 
+def search_news_past_hour(keyword: str, limit: int = 5) -> list[dict]:
+    """Google News 'past hour' search for a keyword — mirrors the manual flow
+    (search the keyword -> News -> Tools -> Past hour). Returns the freshest
+    ``limit`` headlines with source, using Google News' ``when:1h`` operator."""
+    if not keyword.strip():
+        return []
+    return search_news(f"{keyword.strip()} when:1h", limit=limit)
+
+
 def more_context(topic: str, used_angles: list[str], seen_urls: list[str],
                  seen_titles: list[str]) -> dict:
     """One fresh block of context on the next unused angle.

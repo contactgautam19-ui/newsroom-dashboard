@@ -437,10 +437,15 @@ def run_ingest_cycle(manual: bool = False) -> dict:
 
 
 def get_rundown(limit: int = 12) -> list[dict]:
+    # Strict last-hour board: never surface a story published more than
+    # BOARD_WINDOW_HOURS ago, regardless of when it was ingested or retired.
+    cutoff = (datetime.now(timezone.utc)
+              - timedelta(hours=config.BOARD_WINDOW_HOURS)).isoformat()
     with db.connect() as con:
         rows = con.execute(
-            "SELECT * FROM stories WHERE active=1 ORDER BY score DESC, last_updated_at DESC LIMIT ?",
-            (limit,),
+            "SELECT * FROM stories WHERE active=1 AND published_at >= ? "
+            "ORDER BY score DESC, last_updated_at DESC LIMIT ?",
+            (cutoff, limit),
         ).fetchall()
         rundown = db.rows_to_dicts(rows)
         for story in rundown:

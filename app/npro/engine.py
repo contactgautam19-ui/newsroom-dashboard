@@ -183,6 +183,59 @@ def is_desk_question(query: str) -> bool:
     return bool(_DESK_HINT.search(query or ""))
 
 
+# "what's the latest on <keyword>" -> a Google-News past-hour headline pull
+_LATEST_RE = re.compile(
+    r"\b(?:latest|newest|recent|breaking|updates?|happening|new)\b"
+    r".*?\b(?:on|about|with|regarding|around|for)\s+(.+?)\s*[?.!]*$",
+    re.IGNORECASE)
+_KW_TRAILING = re.compile(
+    r"\b(right now|as of now|currently|today|please|news|story|stories|latest)\b\s*$",
+    re.IGNORECASE)
+
+
+def latest_keyword(query: str) -> str | None:
+    """Extract the keyword from a 'what's the latest on X' request, else None."""
+    m = _LATEST_RE.search(query or "")
+    if not m:
+        return None
+    kw = m.group(1).strip().strip("\"'.,?!")
+    prev = None
+    while prev != kw:                        # peel trailing filler ("... news")
+        prev = kw
+        kw = _KW_TRAILING.sub("", kw).strip().strip("\"'.,?!")
+    return kw if 1 < len(kw) <= 60 else None
+
+
+def _mins_ago(iso: str) -> str:
+    from datetime import datetime, timezone
+    try:
+        m = int((datetime.now(timezone.utc)
+                 - datetime.fromisoformat(iso)).total_seconds() // 60)
+        return f"{m}m ago" if m >= 0 else ""
+    except (TypeError, ValueError):
+        return ""
+
+
+def past_hour_brief(keyword: str, items: list[dict]) -> str:
+    """Deterministic 'past hour' headline pull for a keyword: the freshest 5
+    headlines + source, no LLM needed."""
+    head = f'**Latest on "{keyword}" — past hour**'
+    if not items:
+        return (f"{head}\nNothing has been filed on \"{keyword}\" in the last "
+                "hour. Want me to widen the search to today?")
+    lines = [head]
+    for it in items[:5]:
+        src = it.get("publisher") or "source unknown"
+        age = _mins_ago(it.get("published_at", ""))
+        title = it["title"]
+        if src and title.endswith(src):     # GN titles end with " - Publisher"
+            title = title[: -len(src)].rstrip(" -–—")
+        lines.append(f"- **{src}**{' · ' + age if age else ''}: {title}")
+    lines.append("\n**Next Step**\nPick any of these and I'll build an AV Read, "
+                 "package or explainer on it.")
+    return "\n".join(lines)
+
+
 def _safe_desk() -> str:
     try:
         from app.npro.desk import desk_snapshot

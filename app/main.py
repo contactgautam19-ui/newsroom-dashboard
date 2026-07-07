@@ -460,6 +460,16 @@ async def npro_chat(payload: dict = Body(...)):
     if not query:
         raise HTTPException(400, "query required")
     loop = asyncio.get_running_loop()
+
+    # "what's the latest on <keyword>" -> deterministic Google-News past-hour
+    # pull: freshest 5 headlines + source, no LLM required.
+    keyword = engine.latest_keyword(query)
+    if keyword:
+        items = await loop.run_in_executor(
+            None, lambda: retrieval.search_news_past_hour(keyword, 5))
+        return {"mode": "latest", "answer": engine.past_hour_brief(keyword, items),
+                "topic": keyword, "retrieved": items, "has_key": engine.has_key()}
+
     desk_q = engine.is_desk_question(query)
     history = payload.get("history") or []
     retrieved: list = []
