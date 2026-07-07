@@ -119,15 +119,43 @@ def _sig_tokens(title: str) -> set[str]:
     }
 
 
+# Generic words that recur across *unrelated* stories, so two titles sharing
+# only these (e.g. "Supreme Court" in a Yoon story and an Ayodhya story) are NOT
+# the same event. Place names and proper nouns are deliberately absent — those
+# are the distinctive tokens that actually identify a story.
+_COMMON_EVENT_WORDS = {
+    # institutions / roles
+    "supreme", "court", "high", "minister", "president", "prime", "government",
+    "govt", "police", "chief", "party", "leader", "official", "officials",
+    "cabinet", "parliament", "assembly", "ministry", "department", "committee",
+    "commission", "council", "board", "bench", "judge", "cops", "forces",
+    "army", "troops", "centre", "state", "union", "opposition",
+    # process / event nouns
+    "report", "reports", "reported", "case", "probe", "alert", "meeting",
+    "statement", "protest", "rally", "verdict", "ruling", "order", "notice",
+    "hearing", "session", "plan", "scheme", "project", "deal", "talks", "visit",
+    "event", "issue", "issues", "matter", "move", "moves", "poll", "polls",
+    "vote", "result", "results", "update", "meet", "calls", "seeks", "files",
+    "holds", "slams", "warns", "urges", "demands", "claims",
+    # generic descriptors / scale
+    "heavy", "massive", "major", "huge", "latest", "several", "feared",
+    "trapped", "workers", "people", "death", "dies", "serious", "amid",
+    "after", "rain", "rains", "flood", "floods", "weather", "tunnel",
+}
+
+
 def _same_event(a: set[str], b: set[str]) -> bool:
-    """True when two titles are the same story: they share >=2 distinctive
-    tokens and those cover at least half the shorter title's key words."""
+    """True when two titles are the same story: they share >=2 significant
+    tokens AND at least one shared token is distinctive (a place/name/specific
+    noun, not a generic institution or descriptor). This merges long,
+    differently-worded takes on one event (they still share the place + subject)
+    without collapsing unrelated stories that merely share "supreme court" etc."""
     if len(a) < 2 or len(b) < 2:
         return False
     shared = a & b
     if len(shared) < 2:
         return False
-    return len(shared) / min(len(a), len(b)) >= 0.5
+    return any(w not in _COMMON_EVENT_WORDS for w in shared)
 
 
 def _collapse_duplicates(con) -> int:
