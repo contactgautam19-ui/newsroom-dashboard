@@ -79,7 +79,8 @@ def cycle(no_web: bool, with_ocr: bool, with_x: bool) -> None:
         res = timesnow_ocr.run_ocr_cycle()
         if res.get("ok"):
             print(f"[{_now()}] Times Now OCR: "
-                  f"{'🔴 ' if res.get('breaking') else ''}{res['headline']}", flush=True)
+                  f"{'[BREAKING] ' if res.get('breaking') else ''}"
+                  f"{res['headline'].encode('ascii', 'replace').decode()}", flush=True)
         else:
             print(f"[{_now()}] Times Now OCR skipped: {res.get('reason')}", flush=True)
 
