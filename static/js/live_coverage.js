@@ -115,9 +115,10 @@ const LiveCoverage = (() => {
   function autoTick() {
     const page = document.getElementById('page-stories');
     if (page && !page.classList.contains('hidden') && document.visibilityState === 'visible') {
-      // keep the current hour live; new hours appear as bands roll over
+      // READ-only refresh (GET) — do NOT trigger a poll here, so the auto loop
+      // never spends TwtAPI budget. Only the manual Refresh button polls.
       const keepNow = !selectedKey || (data && selectedKey === data.current_hour_key);
-      refresh().then(() => { if (keepNow && data) selectedKey = data.current_hour_key; render(); });
+      load().then(() => { if (keepNow && data) selectedKey = data.current_hour_key; render(); });
     }
   }
 

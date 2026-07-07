@@ -306,12 +306,18 @@ def live_coverage(hours: int = 12):
 
 @app.post("/api/live-coverage/refresh")
 async def live_coverage_refresh(hours: int = 12):
-    """Poll each channel's live-stream title now, record the current on-air
-    headlines, then return the refreshed hourly digest. Keyless oEmbed fetches;
-    safe to call on demand."""
-    from app.news import onair
+    """Refresh on-air coverage, then return the hourly digest.
+
+    Primary source is the channels' own X accounts (authoritative "we aired
+    this" posts with video/photo + breaking tags), budget-throttled to protect
+    the TwtAPI quota. If no TwtAPI key is set it falls back to the keyless
+    YouTube-title poll. The richer stealth website scrape runs in the local
+    worker, not on this request path."""
+    from app.news import onair, channel_x
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, onair.run_onair_cycle)
+    x = await loop.run_in_executor(None, channel_x.poll_channel_x)
+    if not x.get("ok"):  # no key / API error -> keyless fallback
+        await loop.run_in_executor(None, onair.run_onair_cycle)
     return await loop.run_in_executor(
         None, lambda: onair.onair_hourly(hours_back=max(1, min(hours, 24)))
     )

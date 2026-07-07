@@ -40,9 +40,22 @@ def _now() -> str:
     return datetime.now(timezone.utc).astimezone().strftime("%H:%M:%S")
 
 
-def cycle(no_web: bool, with_ocr: bool) -> None:
+def cycle(no_web: bool, with_ocr: bool, with_x: bool) -> None:
     from app.news import onair
-    # 1. lightweight YouTube-title baseline (keyless, fast)
+    # 1. channels' X accounts — authoritative aired-story headlines (opt-in;
+    #    spends TwtAPI budget, so throttled internally to ~1 call / 15 min)
+    if with_x:
+        from app.news import channel_x
+        xr = channel_x.poll_channel_x()
+        if xr.get("throttled"):
+            print(f"[{_now()}] channel-X: throttled (within {channel_x.MIN_INTERVAL_MIN}m)", flush=True)
+        elif xr.get("ok"):
+            print(f"[{_now()}] channel-X: {xr['headlines']} headlines"
+                  f" · {xr.get('breaking', 0)} breaking · {xr.get('channels', 0)} channels", flush=True)
+        else:
+            print(f"[{_now()}] channel-X skipped: {xr.get('reason')}", flush=True)
+
+    # 2. lightweight YouTube-title baseline (keyless, fast)
     stats = onair.poll_onair()
     line = (f"[{_now()}] titles: {stats['headlines']} headlines"
             f" · {stats['breaking']} breaking · {stats['streams']} streams")
@@ -76,6 +89,8 @@ def main() -> None:
     ap.add_argument("--once", action="store_true", help="run one cycle and exit")
     ap.add_argument("--no-web", action="store_true",
                     help="skip the stealth website scrape (titles only)")
+    ap.add_argument("--x", action="store_true",
+                    help="also poll channels' X accounts (uses TwtAPI budget)")
     ap.add_argument("--ocr", action="store_true", help="also OCR Times Now web player")
     ap.add_argument("--interval", type=float, default=5.0, help="minutes between cycles")
     args = ap.parse_args()
@@ -88,7 +103,7 @@ def main() -> None:
 
     while True:
         try:
-            cycle(args.no_web, args.ocr)
+            cycle(args.no_web, args.ocr, args.x)
         except Exception as exc:  # keep the loop alive across transient failures
             print(f"[{_now()}] cycle error: {exc}", flush=True)
         if args.once:
