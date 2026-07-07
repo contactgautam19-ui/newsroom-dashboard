@@ -87,6 +87,17 @@ def capture_frame(png_path: Path, timeout_ms: int = 30000) -> bool:
         return False
 
 
+# Player chrome / site UI text that OCR picks up but is not broadcast content
+# ("Free watch time left: 04:55", sign-in nags, cookie bars, player controls).
+_UI_JUNK_RE = re.compile(
+    r"free watch|time left|watch time|sign in|log ?in|subscribe|register|"
+    r"cookie|privacy|advert|download (the )?app|install app|notification|"
+    r"volume|mute|settings|quality|fullscreen|buffer|loading|live tv online|"
+    r"watch (live )?tv|continue watching|premium|paywall",
+    re.I,
+)
+
+
 def ocr_headline(png_path: Path) -> dict | None:
     """OCR the lower band of the screenshot and return the best headline line."""
     tess = _tesseract_bin()
@@ -106,8 +117,14 @@ def ocr_headline(png_path: Path) -> dict | None:
     # a chyron headline: mostly letters, several words, not UI chrome
     cands = []
     for ln in lines:
+        if _UI_JUNK_RE.search(ln):
+            continue
         letters = sum(c.isalpha() for c in ln)
-        if len(ln) >= 14 and letters >= len(ln) * 0.6 and len(ln.split()) >= 3:
+        # a real chyron is a sentence-like band: mostly letters, 4+ words, and
+        # not dominated by clock/countdown digits
+        if (len(ln) >= 14 and letters >= len(ln) * 0.6
+                and len(ln.split()) >= 4
+                and not re.search(r"\d{1,2}:\d{2}", ln)):
             cands.append(ln)
     if not cands:
         return None
