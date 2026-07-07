@@ -40,14 +40,26 @@ def _now() -> str:
     return datetime.now(timezone.utc).astimezone().strftime("%H:%M:%S")
 
 
-def cycle(with_ocr: bool) -> None:
+def cycle(no_web: bool, with_ocr: bool) -> None:
     from app.news import onair
+    # 1. lightweight YouTube-title baseline (keyless, fast)
     stats = onair.poll_onair()
     line = (f"[{_now()}] titles: {stats['headlines']} headlines"
             f" · {stats['breaking']} breaking · {stats['streams']} streams")
     if stats["errors"]:
         line += f" · errors: {', '.join(stats['errors'])}"
     print(line, flush=True)
+
+    # 2. stealth web scrape — accurate live-desk headlines from channel sites
+    #    (this is the real monitoring signal; needs a browser, so worker-only)
+    if not no_web:
+        from app.news import web_extract
+        w = web_extract.poll_web(onair.load_streams())
+        wline = (f"[{_now()}] web:    {w['headlines']} headlines"
+                 f" · {w['breaking']} breaking · {w['channels']} sites")
+        if w["errors"]:
+            wline += f" · errors: {', '.join(w['errors'])}"
+        print(wline, flush=True)
 
     if with_ocr:
         from app.news import timesnow_ocr
@@ -62,8 +74,10 @@ def cycle(with_ocr: bool) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="On-air live monitor worker")
     ap.add_argument("--once", action="store_true", help="run one cycle and exit")
+    ap.add_argument("--no-web", action="store_true",
+                    help="skip the stealth website scrape (titles only)")
     ap.add_argument("--ocr", action="store_true", help="also OCR Times Now web player")
-    ap.add_argument("--interval", type=float, default=3.0, help="minutes between cycles")
+    ap.add_argument("--interval", type=float, default=5.0, help="minutes between cycles")
     args = ap.parse_args()
 
     from app import config, db
@@ -74,7 +88,7 @@ def main() -> None:
 
     while True:
         try:
-            cycle(args.ocr)
+            cycle(args.no_web, args.ocr)
         except Exception as exc:  # keep the loop alive across transient failures
             print(f"[{_now()}] cycle error: {exc}", flush=True)
         if args.once:

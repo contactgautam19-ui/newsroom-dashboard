@@ -3,8 +3,15 @@
 #
 #   pip install -r requirements-worker.txt
 #   playwright install chromium          # one-time browser download
+#   python live_worker.py                # titles + stealth website scrape
 #
-# The --ocr Times Now cross-check also needs the tesseract binary on PATH:
+# The stealth website scrape (app/news/stealth_browser.py + web_extract.py) is
+# the primary, accurate TV-monitoring signal — it reads each channel's live-desk
+# headlines straight from its site with a fingerprint-masked browser. No OCR or
+# API keys needed. Run `python live_worker.py --no-web` to skip it.
+#
+# The optional --ocr Times Now video cross-check additionally needs the
+# tesseract binary on PATH:
 #   winget install UB-Mannheim.TesseractOCR   (approve the UAC prompt)
 # then add its install dir (e.g. C:\Program Files\Tesseract-OCR) to PATH.
 
