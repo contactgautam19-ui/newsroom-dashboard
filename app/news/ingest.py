@@ -37,6 +37,16 @@ _JUNK_BULLETIN_RE = re.compile(
     re.I,
 )
 
+# Live-blog wrapper titles ("World News Today Live Updates on July 7, 2026 : …")
+# are rolling desk pages, not stories — the buried item after the colon is
+# whatever the desk last touched, so the whole title is junk.
+_JUNK_LIVEBLOG_RE = re.compile(
+    r"\blive updates?\s+(on|for)?\s*"
+    r"(january|february|march|april|may|june|july|august|september|october|"
+    r"november|december)\s+\d{1,2}",
+    re.I,
+)
+
 # Structural junk detection: date/time-stamped titles with little substance
 _MONTH_NAMES = {
     "january", "february", "march", "april", "may", "june", "july", "august",
@@ -73,6 +83,8 @@ def is_junk_title(title: str) -> bool:
     if _JUNK_TOPIC_RE.search(title):
         return True
     if _JUNK_BULLETIN_RE.search(title):
+        return True
+    if _JUNK_LIVEBLOG_RE.search(title):
         return True
     if _DATE_TIME_RE.search(title) and len(_substantive_tokens(title)) < 3:
         return True
@@ -236,7 +248,10 @@ def run_ingest_cycle(manual: bool = False) -> dict:
     candidates = [a for a in fresh if not is_junk_title(a.title)]
     feed_stats["dropped_junk"] = len(fresh) - len(candidates)
 
-    # Score every clustered candidate, keep the strongest for the rundown
+    # Score every clustered candidate, keep the strongest for the rundown.
+    # India Audience Fit is layered on top of the base framework: stories
+    # rivals are airing rise, foreign filler with no India angle sinks.
+    from app.news import audience
     scored = []
     for raw in candidates:
         story = enrich_mod.enrich(raw)
@@ -244,7 +259,14 @@ def run_ingest_cycle(manual: bool = False) -> dict:
             set(story.sources) | set(raw.corroborators)
             | set(_related_publishers(raw.summary))
         )
-        scored.append((scoring.score_story(story), story))
+        score = scoring.score_story(story)
+        try:
+            entry = audience.audience_entry(raw.title, raw.summary)
+            score["breakdown"].append(entry)
+            score["total"] = min(100, score["total"] + entry["points"])
+        except Exception:
+            pass  # audience layer must never block the cycle
+        scored.append((score, story))
     scored.sort(key=lambda pair: pair[0]["total"], reverse=True)
     articles = scored[: config.STORIES_PER_CYCLE]
 

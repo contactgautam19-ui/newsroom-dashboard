@@ -186,6 +186,49 @@ def news_sources():
     return load_sources(active_only=False)
 
 
+@app.get("/api/alerts/feed")
+def alerts_feed(hours: int = 12, limit: int = 40):
+    """Live breaking feed for the Alerts page + flash strip. Merges, newest
+    first, with NO board-match requirement:
+      - TV: headlines Indian channels are flagging as BREAKING on air
+      - X:  posts from monitored handles that carry a news signal
+      - velocity: viral acceleration events
+    """
+    from datetime import datetime, timedelta, timezone
+    since = (datetime.now(timezone.utc) - timedelta(hours=max(1, min(hours, 48)))
+             ).isoformat()
+    items = []
+    with db.connect() as con:
+        for r in con.execute(
+                "SELECT channel, headline, breaking, first_seen FROM live_onair "
+                "WHERE first_seen >= ? AND breaking=1 "
+                "ORDER BY first_seen DESC LIMIT ?", (since, limit)).fetchall():
+            items.append({"kind": "tv", "source": r["channel"],
+                          "title": r["headline"], "at": r["first_seen"],
+                          "tag": "BREAKING ON AIR"})
+        for r in con.execute(
+                "SELECT handle, display_name, text, news_signal, created_at "
+                "FROM tweets WHERE discarded=0 AND news_signal IS NOT NULL "
+                "AND created_at >= ? ORDER BY created_at DESC LIMIT ?",
+                (since, limit)).fetchall():
+            items.append({"kind": "x", "source": r["handle"],
+                          "title": r["text"], "at": r["created_at"],
+                          "tag": (r["news_signal"] or "signal").upper()})
+        for r in con.execute(
+                "SELECT v.term, v.velocity_pct, v.high_demand, v.created_at, "
+                "s.title AS story_title FROM velocity_events v "
+                "LEFT JOIN stories s ON s.id=v.story_id "
+                "WHERE v.created_at >= ? ORDER BY v.created_at DESC LIMIT ?",
+                (since, limit)).fetchall():
+            items.append({"kind": "velocity", "source": f"#{r['term']}",
+                          "title": r["story_title"] or f"'{r['term']}' spiking "
+                          f"+{round(r['velocity_pct'])}% on X",
+                          "at": r["created_at"],
+                          "tag": "HIGH DEMAND" if r["high_demand"] else "VIRAL SPIKE"})
+    items.sort(key=lambda i: i["at"] or "", reverse=True)
+    return items[:limit]
+
+
 @app.get("/api/velocity")
 def velocity(limit: int = 20):
     with db.connect() as con:
@@ -412,12 +455,14 @@ async def npro_chat(payload: dict = Body(...)):
         raise HTTPException(400, "query required")
     loop = asyncio.get_running_loop()
     desk_q = engine.is_desk_question(query)
+    history = payload.get("history") or []
     retrieved: list = []
     if not desk_q:
         retrieved = await loop.run_in_executor(
             None, lambda: retrieval.search_news(query))
     answer = await loop.run_in_executor(
-        None, lambda: engine.editorial_answer(query, retrieved, payload.get("topic") or ""))
+        None, lambda: engine.editorial_answer(
+            query, retrieved, payload.get("topic") or "", history=history))
     return {"mode": "desk" if desk_q else "story", "answer": answer,
             "topic": None if desk_q else query, "retrieved": retrieved,
             "has_key": engine.has_key()}

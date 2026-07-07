@@ -29,6 +29,8 @@ const StoryDesk = (() => {
     visual:    () => 'Strong visuals available',
     novelty:   () => 'Unusual, unexpected angle',
     trend:     () => 'Trending on X right now',
+    audience:  b => (b.evidence[0] || '').includes('airing')
+                    ? 'Indian channels airing this' : 'Clear India angle',
   };
 
   function whyLine(s) {

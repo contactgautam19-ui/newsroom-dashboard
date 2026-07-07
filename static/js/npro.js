@@ -12,7 +12,7 @@ const NPro = (() => {
       storyId: storyId ?? null, topic: topic || '',
       retrieved: [], usedAngles: [], seenUrls: new Set(), seenTitles: [],
       format: null, qIndex: 0, params: {}, multiSel: new Set(),
-      guests: [], lastScript: null, history: [],
+      guests: [], lastScript: null, history: [], convo: [],
     };
   }
 
@@ -114,6 +114,7 @@ const NPro = (() => {
     pushHistory(S.topic);
     const srcCount = S.retrieved.length;
     msgAI(`${srcLine(srcCount)}${mdlite(data.summary || '')}`);
+    S.convo.push({ role: 'assistant', content: data.summary || '' });
     askFormat();
     loadIntel();
   }
@@ -248,6 +249,7 @@ const NPro = (() => {
     } catch { return msgAI('Generation failed — try again.'); }
     if (!res.ok) return msgAI(esc(res.error || 'Could not generate.'));
     S.lastScript = res.script;
+    S.convo.push({ role: 'assistant', content: res.script || '' });
     renderScript(res.script, res.model);
   }
 
@@ -361,24 +363,39 @@ const NPro = (() => {
     msgUser(q);
     aiTyping();
     let data;
-    try { data = await postJSON('/api/npro/chat', { query: q, topic: S.topic, story_id: S.storyId }); }
+    try {
+      data = await postJSON('/api/npro/chat', {
+        query: q, topic: S.topic, story_id: S.storyId,
+        history: S.convo.slice(-10),
+      });
+    }
     catch { return msgAI('I couldn’t reach the desk — try again.'); }
     clearTyping();
+    S.convo.push({ role: 'user', content: q });
+    S.convo.push({ role: 'assistant', content: data.answer || '' });
     if (data.mode === 'story' && (data.retrieved || []).length) {
-      // a news topic: adopt it as the session story and unlock the formats
-      S.storyId = null;
+      // a news topic: adopt it for retrieval/context and offer production
       S.topic = data.topic || q;
       S.retrieved = data.retrieved;
       S.usedAngles = []; S.seenUrls = new Set(); S.seenTitles = [];
       S.retrieved.forEach(a => { if (a.url) S.seenUrls.add(a.url); if (a.title) S.seenTitles.push(a.title); });
-      setTitle(S.topic, `${S.retrieved.length} sources · Editorial Intelligence Engine`);
+      setTitle(S.topic, `${S.retrieved.length} sources · N-Pro`);
       pushHistory(S.topic);
-      msgAI(`${srcLine(S.retrieved.length)}${mdlite(data.answer || '')}`);
-      askFormat();
+      msgAI(`${srcLine(S.retrieved.length)}${mdlite(data.answer || '')}${formatChips()}`);
       loadIntel();
     } else {
       msgAI(mdlite(data.answer || ''));
     }
+  }
+
+  // compact production row appended under a chat answer — lighter than the
+  // full format menu, keeps the conversation flowing
+  function formatChips() {
+    if (!meta?.formats) return '';
+    const chips = meta.formats.map(f =>
+      `<button onclick="NPro.pickFormat('${f.id}')" class="px-2.5 py-1 rounded-lg text-[12px] font-semibold border border-line bg-white hover:border-navy">${f.icon} ${esc(f.label)}</button>`).join('');
+    return `<div class="mt-3 pt-2.5 border-t border-line flex items-center gap-1.5 flex-wrap">
+      <span class="text-[11.5px] text-sub font-medium">Produce:</span>${chips}</div>`;
   }
 
   // ── standalone mode (sidebar tab) ────────────────────────────────────────────

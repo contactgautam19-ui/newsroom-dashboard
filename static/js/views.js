@@ -46,28 +46,76 @@ const Views = (() => {
       </div>`;
   }
 
+  // Live breaking feed: TV channels breaking on air + X news signals + viral
+  // spikes, newest first. Auto-refreshes every 60s while the page is open.
+  const ALERT_STYLE = {
+    tv:       { icon: '📺', bar: '#D92D20', chip: 'bg-red1 text-red8' },
+    x:        { icon: '𝕏',  bar: '#0B1526', chip: 'bg-paper text-ink' },
+    velocity: { icon: '🚀', bar: '#2563EB', chip: 'bg-blue1 text-blue8' },
+  };
+  let alertsTimer = null;
+
   async function alerts() {
     const el = document.getElementById('alerts-body');
-    let events = [];
-    try { events = await (await fetch('/api/velocity?limit=25')).json(); } catch { /* empty ok */ }
     const badge = document.getElementById('alert-badge');
     if (badge) badge.classList.add('hidden');
     if (typeof alertCount !== 'undefined') alertCount = 0;
 
-    el.innerHTML = events.length ? events.map(v => `
-      <div class="bg-white border border-line rounded-2xl p-4 flex items-center gap-4" style="border-left:4px solid ${v.high_demand ? '#D92D20' : '#2563EB'}">
-        <div class="shrink-0 w-10 h-10 rounded-full ${v.high_demand ? 'bg-red1' : 'bg-blue1'} flex items-center justify-center text-[16px]">${v.high_demand ? '🔥' : '🚀'}</div>
-        <div class="min-w-0 flex-1">
-          <p class="text-[14px] font-semibold">#${esc(v.term)} <span class="text-green6">+${Math.round(v.velocity_pct)}%</span>
-            <span class="text-sub font-normal">· ${Math.round(v.posts_per_hour).toLocaleString('en-IN')} posts/hr · +${v.boost} pts injected</span>
-            ${v.high_demand ? '<span class="text-red6 font-semibold"> · HIGH DEMAND</span>' : ''}
-          </p>
-          <p class="text-[13px] text-sub truncate">${esc(v.story_title || 'no matching board story')}</p>
-        </div>
-        <span class="text-[12px] text-sub whitespace-nowrap">${ageLabel(v.created_at)}</span>
-      </div>`).join('')
-      : '<div class="bg-white border border-line rounded-2xl p-8 text-center text-sub text-[14px]">No viral acceleration events yet. They appear here when a term spikes >150% and matches a board story.</div>';
+    let items = [];
+    try { items = await (await fetch('/api/alerts/feed?hours=24')).json(); } catch { /* empty ok */ }
+
+    el.innerHTML = `
+      <p class="text-[12.5px] text-sub mb-1">Live feed — what TV channels are breaking on air, news signals from monitored X handles, and viral spikes. Refreshes every minute.</p>
+      ${items.length ? items.map(a => {
+        const st = ALERT_STYLE[a.kind] || ALERT_STYLE.velocity;
+        return `
+        <div class="bg-white border border-line rounded-2xl p-4 flex items-center gap-4" style="border-left:4px solid ${st.bar}">
+          <div class="shrink-0 w-10 h-10 rounded-full bg-paper flex items-center justify-center text-[16px]">${st.icon}</div>
+          <div class="min-w-0 flex-1">
+            <p class="text-[12px] mb-0.5">
+              <span class="px-2 py-0.5 rounded font-bold text-[10px] tracking-wide ${st.chip}">${esc(a.tag)}</span>
+              <span class="font-semibold ml-1.5">${esc(a.source)}</span>
+            </p>
+            <p class="text-[14px] leading-snug">${esc(a.title)}</p>
+          </div>
+          <span class="text-[12px] text-sub whitespace-nowrap">${ageLabel(a.at)}</span>
+        </div>`;
+      }).join('')
+      : '<div class="bg-white border border-line rounded-2xl p-8 text-center text-sub text-[14px]">Nothing breaking right now. TV breaking banners, X news signals and viral spikes land here the moment they\'re detected.</div>'}`;
+
+    // keep it live while the page is visible
+    clearInterval(alertsTimer);
+    alertsTimer = setInterval(() => {
+      const page = document.getElementById('page-alerts');
+      if (page && !page.classList.contains('hidden') && document.visibilityState === 'visible') alerts();
+      else clearInterval(alertsTimer);
+    }, 60000);
   }
 
   return { analytics, alerts };
+})();
+
+// Global breaking watch: flash the strip when a TV channel starts breaking a
+// story or a fresh high-signal X post lands — independent of the story board.
+(() => {
+  const seen = new Set();
+  let first = true;
+  async function tick() {
+    if (document.visibilityState !== 'visible') return;
+    let items = [];
+    try { items = await (await fetch('/api/alerts/feed?hours=2&limit=15')).json(); } catch { return; }
+    for (const a of items) {
+      const key = `${a.kind}:${a.source}:${(a.title || '').slice(0, 60)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (first) continue; // seed silently on load
+      if (a.kind === 'tv') Flash.show('breaking', `${a.source} breaking: ${a.title}`);
+      else if (a.kind === 'x' && /breaking|flash/i.test(a.tag)) Flash.show('breaking', `${a.source}: ${a.title}`);
+      else if (a.kind === 'velocity') Flash.show('viral', a.title);
+      else bumpAlerts();
+    }
+    first = false;
+  }
+  tick();
+  setInterval(tick, 120000);
 })();

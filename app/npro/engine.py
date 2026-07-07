@@ -33,38 +33,33 @@ SYSTEM = (
     "- Suggest stronger editorial angles when useful."
 )
 
-# Editorial Intelligence Engine persona — used for chat answers and story
-# briefs. The internal editorial checklist (importance, lead-worthiness,
-# political/business significance, winners/losers, investigative & legal
-# angles, what-next) is reasoned through internally and woven into prose —
-# never displayed as a list of questions.
+# Conversational newsroom-chatbot persona. Relaxed on scope and format — it
+# helps with ANY story or news question the editor brings, not just the board.
+# The editorial checklist (importance, lead call, political/business impact,
+# winners/losers, investigative & legal angles) is reasoned silently and woven
+# in where it helps; never printed as a checklist. Only the trust rules are
+# non-negotiable: no fabrication, and unconfirmed claims get labelled.
 EDITORIAL_SYSTEM = (
-    "You are N-Pro, the Editorial Intelligence Engine of a television newsroom — "
-    "a senior editorial board available 24/7. You think like a senior editor, "
-    "not a search engine.\n\n"
-    "INTERNAL ANALYSIS (do this silently for every story; NEVER print these "
-    "questions or any checklist): why the story matters; whether it should lead "
-    "the bulletin; what competitors are missing; political significance; "
-    "business impact; what happens next; who benefits and who loses; "
-    "investigative and legal angles; how to explain it to viewers.\n\n"
-    "EVIDENCE DISCIPLINE:\n"
-    "- Use ONLY the supplied reporting and desk data. Never fabricate sources, "
-    "quotes or numbers.\n"
-    "- Distinguish clearly: verified facts, official statements, expert "
-    "opinions, developing information, and label unconfirmed items (UNVERIFIED).\n"
-    "- Where evidence is incomplete, say so and recommend what to verify next.\n"
-    "- Surface multiple perspectives on contested issues.\n"
-    "- Ask ONE short clarifying question when the editor's intent is genuinely "
-    "unclear — otherwise just answer.\n\n"
-    "FORMAT (strict — the UI renders this):\n"
-    "- Open each short section with a **Bold Header** line (2-4 words).\n"
-    "- Under each header: 1-3 tight sentences or '- ' bullets. No # symbols, no "
-    "tables, no numbered question lists.\n"
-    "- When unpacking a story, the first section is **Executive Summary** and "
-    "it must be under 100 words.\n"
-    "- Recommendations must be decisive: name the story, give the one-line why.\n"
-    "- Keep the whole reply under ~220 words unless the editor asks for depth. "
-    "End with a one-line **Next Step**."
+    "You are N-Pro, a sharp, helpful newsroom chatbot for a television news "
+    "team — like having a senior editor on chat, 24/7. Help with anything news: "
+    "stories on the desk, stories the editor brings up, angles, rundowns, "
+    "scripts, headlines, social, competitive intel. If something is outside "
+    "news entirely, answer briefly and steer back to the desk.\n\n"
+    "TRUST (non-negotiable):\n"
+    "- Never fabricate sources, quotes or numbers. Work from the supplied "
+    "reporting and desk data; say plainly when you don't have enough.\n"
+    "- Label unconfirmed or conflicting claims (UNVERIFIED) and note when a "
+    "figure is still developing.\n\n"
+    "STYLE:\n"
+    "- Conversational and fast. Match the length to the question — one tight "
+    "paragraph for a simple ask, structure only when it genuinely helps.\n"
+    "- For bigger answers use **Bold Header** lines with short text or '- ' "
+    "bullets under them (no # symbols, no tables). When unpacking a fresh "
+    "story, open with **Executive Summary** in under 100 words.\n"
+    "- Be decisive: name stories, give the one-line why, offer the next move.\n"
+    "- Think like a senior editor, not a search engine: what matters, what "
+    "leads, what rivals are missing, what happens next — woven into your "
+    "answer, never as a list of questions."
 )
 
 
@@ -76,8 +71,12 @@ def has_key() -> bool:
     return bool(_key())
 
 
-def _call(system: str, user: str, max_tokens: int = MAX_TOKENS) -> str | None:
-    """Call Claude; return text, or None on any failure / missing key."""
+def _call(system: str, user: str, max_tokens: int = MAX_TOKENS,
+          history: list[dict] | None = None) -> str | None:
+    """Call Claude; return text, or None on any failure / missing key.
+
+    ``history`` is prior chat turns [{'role': 'user'|'assistant', 'content': str}]
+    so follow-up questions carry context like a real chat."""
     key = _key()
     if not key:
         return None
@@ -86,9 +85,15 @@ def _call(system: str, user: str, max_tokens: int = MAX_TOKENS) -> str | None:
         from anthropic import Anthropic
         model = settings_store.get_setting("writer_model", MODEL_DEFAULT) or MODEL_DEFAULT
         client = Anthropic(api_key=key)
+        messages = [
+            {"role": m["role"], "content": str(m.get("content", ""))[:4000]}
+            for m in (history or [])[-10:]
+            if m.get("role") in ("user", "assistant") and m.get("content")
+        ]
+        messages.append({"role": "user", "content": user})
         resp = client.messages.create(
             model=model, max_tokens=max_tokens,
-            system=system, messages=[{"role": "user", "content": user}],
+            system=system, messages=messages,
         )
         if resp.stop_reason == "refusal":
             return None
@@ -186,20 +191,21 @@ def _safe_desk() -> str:
         return ""
 
 
-def editorial_answer(query: str, retrieved: list[dict], topic: str = "") -> str:
-    """Answer a free-form editorial question with desk data + reporting."""
+def editorial_answer(query: str, retrieved: list[dict], topic: str = "",
+                     history: list[dict] | None = None) -> str:
+    """Answer a free-form editorial question with desk data + reporting.
+    ``history`` carries the running conversation so follow-ups work."""
     desk = _safe_desk()
     parts = []
     if desk:
         parts.append(desk)
     if retrieved:
         parts.append(context_block(None, retrieved))
-    parts.append(f"EDITOR'S QUESTION: {query}")
-    parts.append(
-        "Answer as the senior editorial board: decisive, specific, grounded in "
-        "the desk snapshot and reporting above. Recommend actual stories by name "
-        "where relevant.")
-    out = _call(EDITORIAL_SYSTEM, "\n\n".join(parts), max_tokens=1200)
+    if topic:
+        parts.append(f"CURRENT STORY IN THIS CHAT: {topic}")
+    parts.append(f"EDITOR'S MESSAGE: {query}")
+    out = _call(EDITORIAL_SYSTEM, "\n\n".join(parts), max_tokens=1200,
+                history=history)
     if out:
         return out
     # keyless fallback: a clean heuristic answer from the board
