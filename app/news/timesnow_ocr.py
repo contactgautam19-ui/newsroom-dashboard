@@ -105,10 +105,16 @@ def ocr_headline(png_path: Path) -> dict | None:
         log.warning("tesseract not found — Times Now OCR skipped")
         return None
     try:
-        out = subprocess.run(
+        proc = subprocess.run(
             [tess, str(png_path), "stdout", "--psm", "6"],
             capture_output=True, text=True, timeout=30,
-        ).stdout
+            encoding="utf-8", errors="replace",
+        )
+        out = proc.stdout or ""
+        if not out.strip():
+            log.warning("tesseract empty output (rc=%s): %s",
+                        proc.returncode, (proc.stderr or "")[:200])
+            return None
     except (OSError, subprocess.SubprocessError) as exc:
         log.warning("tesseract failed: %s", exc)
         return None
