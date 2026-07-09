@@ -40,9 +40,33 @@ _YT_JUNK_RE = re.compile(
     re.I,
 )
 
+# sponsor bands / pre-roll ads that play inside the stream ("Switch To Smart
+# Trading … subscriptions stoxkar com") — an ad is never an aired story
+_AD_RE = re.compile(
+    r"trading|subscript|demat|invest now|loan|emi\b|casino|betting|"
+    r"download now|install|offer|discount|sale ends|shop now|buy now|"
+    r"\b\w+\s?\.\s?(com|in|io)\b|\bcom\b",
+    re.I,
+)
+
+# site navigation vocabulary — a full-page fallback screenshot OCRs the menu
+# bar; 4+ hits on one line means it's a nav rail, not a chyron
+_NAV_WORDS = {
+    "india", "world", "entertainment", "sports", "business", "lifestyle",
+    "tech", "videos", "games", "crypto", "photos", "latest", "stories",
+    "home", "opinion", "astrology", "education", "health", "elections",
+    "movies", "auto", "web",
+}
+
+
+def _nav_menu(line: str) -> bool:
+    toks = re.findall(r"[a-z]+", line.lower())
+    return len(toks) >= 5 and sum(t in _NAV_WORDS for t in toks) >= 4
+
 
 def _is_junk(line: str) -> bool:
-    return bool(timesnow_ocr._UI_JUNK_RE.search(line) or _YT_JUNK_RE.search(line))
+    return bool(timesnow_ocr._UI_JUNK_RE.search(line) or _YT_JUNK_RE.search(line)
+                or _AD_RE.search(line) or _nav_menu(line))
 
 
 def _candidate(line: str) -> bool:
@@ -73,6 +97,13 @@ def _tidy(text: str) -> str:
         return not tok.isupper() and not tok.islower()
     while len(words) > 3 and len(words[-1]) <= 3 and _junk_tail(words[-1]):
         words.pop()
+    # in an ALL-CAPS chyron, short lowercase edge tokens ('g', 'ip') are grit
+    letters = [c for c in " ".join(words) if c.isalpha()]
+    if letters and sum(c.isupper() for c in letters) >= len(letters) * 0.7:
+        while len(words) > 3 and len(words[-1]) <= 2 and words[-1].islower():
+            words.pop()
+        while len(words) > 3 and len(words[0]) <= 2 and words[0].islower():
+            words.pop(0)
     return " ".join(words)
 
 
@@ -158,17 +189,16 @@ def _capture_youtube(page, video_id: str, png: Path) -> bool:
 
 
 def _capture_site_player(page, url: str, png: Path) -> bool:
-    """Screenshot the player on a channel's own live-TV page (Times Now)."""
+    """Screenshot the player on a channel's own live-TV page (Times Now).
+
+    Strictly the <video> frame — a full-page fallback would OCR the site's
+    nav menu and article rails, which is exactly what the panel must not show."""
     page.goto(url, wait_until="domcontentloaded", timeout=40000)
     page.wait_for_timeout(9000)
     video = page.locator("video").first
-    try:
-        if video.count() and video.is_visible():
-            video.screenshot(path=str(png), timeout=8000)
-        else:
-            page.screenshot(path=str(png))
-    except Exception:
-        page.screenshot(path=str(png))
+    if not video.count() or not video.is_visible():
+        return False
+    video.screenshot(path=str(png), timeout=8000)
     return png.exists() and png.stat().st_size > 0
 
 
