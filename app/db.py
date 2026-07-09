@@ -148,7 +148,8 @@ CREATE TABLE IF NOT EXISTS live_onair (
     hour_key TEXT NOT NULL,                    -- IST hour bucket 'YYYY-MM-DDTHH'
     breaking INTEGER NOT NULL DEFAULT 0,
     first_seen TEXT NOT NULL,
-    last_seen TEXT NOT NULL
+    last_seen TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'title'       -- ocr | x | title | web
 );
 """
 
@@ -169,6 +170,10 @@ MIGRATIONS = [
     "ALTER TABLE tweets ADD COLUMN avatar_url TEXT",
     # live rival-TV monitor (2026-07): channel names currently airing this story
     "ALTER TABLE stories ADD COLUMN rival_coverage TEXT",
+    # on-air provenance (2026-07): which layer saw it — the panel shows only
+    # broadcast evidence (ocr = player OCR, x = channel's aired-story post),
+    # while title/web rows keep feeding alerts and rival-coverage matching
+    "ALTER TABLE live_onair ADD COLUMN source TEXT NOT NULL DEFAULT 'title'",
 ]
 
 

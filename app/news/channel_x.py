@@ -40,6 +40,13 @@ _HANDLE_TO_NAME = {v.lower(): k for k, v in CHANNEL_X.items()}
 
 _BREAKING_TAG = re.compile(r"#?\bbig\s?breaking\b|#?\bbreaking(\s?news)?\b|"
                            r"#?\bjust\s?in\b|#?\bnews\s?flash\b", re.IGNORECASE)
+# Channels tag posts of segments that just went to air with a reporter/anchor
+# credit line — "@reporter shares more details with @anchor". The strongest
+# "this story is ON AIR right now" signal a channel account gives.
+_AIRED_CREDIT = re.compile(
+    r"shares?\s+(more\s+)?details|details\s+with\s+@|\bon\s?cam\b|"
+    r"\btune\s?in\b|\bwatch\s+the\s+(full\s+)?(report|debate|show)\b",
+    re.IGNORECASE)
 _TRAILER = re.compile(
     r"(?i)\b(read more|watch|watch:|details|full (story|video|coverage)|"
     r"click here|more details|share more details)\b.*$")
@@ -93,7 +100,8 @@ def _parse(payload) -> list[dict]:
         has_media = bool(mtypes & {"video", "animated_gif", "photo"})
         is_breaking = bool(_BREAKING_TAG.search(raw))
         is_live = "#live" in raw.lower()
-        if not (has_media or is_breaking or is_live):
+        is_aired_credit = bool(_AIRED_CREDIT.search(raw))
+        if not (has_media or is_breaking or is_live or is_aired_credit):
             continue                       # skip pure text/opinion/article posts
         headline = clean_headline(raw)
         if len(headline) < 18:
@@ -108,26 +116,30 @@ def _parse(payload) -> list[dict]:
     return out
 
 
-def _throttled() -> bool:
-    """True if we called TwtAPI within MIN_INTERVAL — skip a real call."""
+def _throttled(min_interval_min: int = MIN_INTERVAL_MIN) -> bool:
+    """True if we called TwtAPI within the interval — skip a real call. The
+    last-call time is persisted in settings, so the local worker and serverless
+    refreshes share one budget clock."""
     last = settings_store.get_setting(_LAST_CALL_KEY, "")
     if not last:
         return False
     try:
         return (datetime.now(timezone.utc) - datetime.fromisoformat(last)
-                ) < timedelta(minutes=MIN_INTERVAL_MIN)
+                ) < timedelta(minutes=min_interval_min)
     except ValueError:
         return False
 
 
-def poll_channel_x(force: bool = False) -> dict:
+def poll_channel_x(force: bool = False,
+                   min_interval_min: int = MIN_INTERVAL_MIN) -> dict:
     """One TwtAPI call across all channel handles; upsert aired-story headlines
-    into live_onair. Throttled unless ``force``. Returns a stats dict; a skipped
-    call reports ``throttled``."""
+    into live_onair. Throttled unless ``force``; callers on a tighter budget
+    (the worker's scheduled poll) pass a larger ``min_interval_min``. Returns a
+    stats dict; a skipped call reports ``throttled``."""
     from app import config
     if not config.TWT_API_KEY:
         return {"ok": False, "reason": "no TwtAPI key", "headlines": 0}
-    if not force and _throttled():
+    if not force and _throttled(min_interval_min):
         return {"ok": True, "throttled": True, "headlines": 0}
 
     from app.x.twtapi_provider import TwtAPIProvider
@@ -154,8 +166,9 @@ def poll_channel_x(force: bool = False) -> dict:
             ).hexdigest()[:16]
             con.execute(
                 """INSERT INTO live_onair
-                   (slug, channel, headline, hour_key, breaking, first_seen, last_seen)
-                   VALUES (?,?,?,?,?,?,?)
+                   (slug, channel, headline, hour_key, breaking, first_seen,
+                    last_seen, source)
+                   VALUES (?,?,?,?,?,?,?,'x')
                    ON CONFLICT (slug) DO UPDATE SET
                      last_seen=excluded.last_seen, headline=excluded.headline,
                      breaking=CASE WHEN live_onair.breaking=1

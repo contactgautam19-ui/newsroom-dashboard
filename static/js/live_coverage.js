@@ -19,8 +19,13 @@ const LiveCoverage = (() => {
     const tag = it.breaking
       ? '<span class="shrink-0 px-1.5 py-0.5 rounded bg-red6 text-white text-[9.5px] font-bold tracking-wide">BREAKING</span> '
       : '';
+    // via: 'ocr' = read off the live player (default), 'x' = channel's own
+    // aired-story post — mark the X ones so editors know the provenance
+    const via = it.via === 'x'
+      ? ' <span class="text-sub text-[10px] font-semibold" title="From the channel\'s X post of the aired segment">𝕏</span>'
+      : '';
     return `<li class="text-[13px] leading-snug flex gap-1.5 items-start">
-      <span class="text-sub">·</span><span>${tag}${esc(it.headline)}</span></li>`;
+      <span class="text-sub">·</span><span>${tag}${esc(it.headline)}${via}</span></li>`;
   }
 
   function channelBlock(c) {

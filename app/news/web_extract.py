@@ -130,8 +130,9 @@ def _upsert(channel: str, items: list[dict]) -> int:
             ).hexdigest()[:16]
             con.execute(
                 """INSERT INTO live_onair
-                   (slug, channel, headline, hour_key, breaking, first_seen, last_seen)
-                   VALUES (?,?,?,?,?,?,?)
+                   (slug, channel, headline, hour_key, breaking, first_seen,
+                    last_seen, source)
+                   VALUES (?,?,?,?,?,?,?,'web')
                    ON CONFLICT (slug) DO UPDATE SET
                      last_seen=excluded.last_seen, headline=excluded.headline,
                      breaking=CASE WHEN live_onair.breaking=1

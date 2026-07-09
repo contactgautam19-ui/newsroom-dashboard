@@ -10,3 +10,5 @@ venv/
 briefings_out/
 .vercel/
 _serverless_local.py
+worker.log
+worker.err.log

@@ -225,8 +225,8 @@ def poll_onair() -> dict:
                 con.execute(
                     """INSERT INTO live_onair
                        (slug, channel, headline, hour_key, breaking,
-                        first_seen, last_seen)
-                       VALUES (?,?,?,?,?,?,?)
+                        first_seen, last_seen, source)
+                       VALUES (?,?,?,?,?,?,?,'title')
                        ON CONFLICT (slug) DO UPDATE SET
                          last_seen=excluded.last_seen,
                          headline=excluded.headline,
@@ -260,22 +260,51 @@ def _hour_label(hour_key: str) -> str:
     return f"{fmt(dt.hour)} – {fmt((dt.hour + 1) % 24)}"
 
 
-def onair_hourly(hours_back: int = WINDOW_HOURS) -> dict:
-    """On-air headlines grouped by IST hour -> channel, newest hour first.
+def _near_duplicate(headline: str, kept: list[dict]) -> bool:
+    """True when an OCR/X headline is a token-level rerun of one already kept —
+    successive OCR passes of the same chyron differ by a word or two, and
+    without this the hour bucket fills with five variants of one story."""
+    toks = {w for w in re.findall(r"[a-z]{3,}", headline.lower())}
+    if not toks:
+        return True
+    for k in kept:
+        ktoks = {w for w in re.findall(r"[a-z]{3,}", k["headline"].lower())}
+        if not ktoks:
+            continue
+        overlap = len(toks & ktoks) / min(len(toks), len(ktoks))
+        if overlap >= 0.7:
+            # keep the longer read; swap in place if the new one is fuller
+            if len(headline) > len(k["headline"]):
+                k["headline"] = headline
+            return True
+    return False
 
-    Each hour: {label, date, hour_key, total, breaking, channels:[{channel,
-    count, breaking, items:[{headline, breaking}]}]}. Also returns
-    ``current_hour_key`` so the UI can default to the live hour.
+
+# what counts as broadcast evidence for the "What's on air" panel: player OCR
+# and the channel's own aired-story X posts. YouTube title tags ('title') and
+# website scrapes ('web') still feed alerts + rival matching but NOT this panel
+AIRED_SOURCES = ("ocr", "x")
+
+
+def onair_hourly(hours_back: int = WINDOW_HOURS) -> dict:
+    """Aired headlines grouped by IST hour -> channel, newest hour first.
+
+    Only broadcast-evidence rows (source in AIRED_SOURCES) appear: player OCR
+    reads and channels' own "we aired this" X posts. Each hour: {label, date,
+    hour_key, total, breaking, channels:[{channel, count, breaking,
+    items:[{headline, breaking, via}]}]}. Also returns ``current_hour_key``
+    so the UI can default to the live hour.
     """
     now = datetime.now(timezone.utc)
     current_key = _hour_key(now.astimezone(IST))
     since = (now - timedelta(hours=hours_back)).isoformat()
+    marks = ",".join("?" for _ in AIRED_SOURCES)
     with db.connect() as con:
         rows = con.execute(
-            "SELECT channel, headline, hour_key, breaking, first_seen "
-            "FROM live_onair WHERE first_seen >= ? "
+            "SELECT channel, headline, hour_key, breaking, first_seen, source "
+            f"FROM live_onair WHERE first_seen >= ? AND source IN ({marks}) "
             "ORDER BY hour_key DESC, breaking DESC, first_seen ASC",
-            (since,),
+            (since, *AIRED_SOURCES),
         ).fetchall()
     rows = db.rows_to_dicts(rows)
 
@@ -285,7 +314,10 @@ def onair_hourly(hours_back: int = WINDOW_HOURS) -> dict:
     for r in rows:
         chans = hours.setdefault(r["hour_key"], {})
         items = chans.setdefault(r["channel"], [])
-        items.append({"headline": r["headline"], "breaking": bool(r["breaking"])})
+        if _near_duplicate(r["headline"], items):
+            continue
+        items.append({"headline": r["headline"], "breaking": bool(r["breaking"]),
+                      "via": r["source"]})
         if r["breaking"]:
             hour_break[r["hour_key"]] = hour_break.get(r["hour_key"], 0) + 1
 
