@@ -308,10 +308,23 @@ def onair_hourly(hours_back: int = WINDOW_HOURS) -> dict:
         ).fetchall()
     rows = db.rows_to_dicts(rows)
 
+    # display-time quality gate for OCR rows: a stored read that fails the
+    # current junk/quality rules never renders, so filter improvements clean
+    # up historical rows retroactively without touching the DB
+    from app.news import live_ocr
+
+    def _display_junk(r: dict) -> bool:
+        if r["source"] != "ocr":
+            return False
+        return (live_ocr._is_junk(r["headline"])
+                or not live_ocr._candidate(r["headline"]))
+
     # hour_key -> channel -> list[items]
     hours: dict[str, dict[str, list]] = {}
     hour_break: dict[str, int] = {}
     for r in rows:
+        if _display_junk(r):
+            continue
         chans = hours.setdefault(r["hour_key"], {})
         items = chans.setdefault(r["channel"], [])
         if _near_duplicate(r["headline"], items):
