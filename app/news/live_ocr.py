@@ -69,12 +69,29 @@ def _is_junk(line: str) -> bool:
                 or _AD_RE.search(line) or _nav_menu(line))
 
 
+# 1–2 char tokens that ARE real headline words, not OCR fragments
+_SHORT_OK = {"a", "i", "an", "in", "on", "at", "to", "of", "by", "as", "is",
+             "it", "no", "us", "uk", "vs", "pm", "cm", "ai", "ed", "mp", "up"}
+
+
 def _candidate(line: str) -> bool:
-    """Sentence-like broadcast band: mostly letters, several words, no clock."""
+    """Sentence-like broadcast band: mostly letters, several real words, no
+    clock. Frame-transition mush ('ot ilo EO eet ag Te gt ieee') OCRs as runs
+    of 1–2 char fragments, so demand mostly full-length words too."""
     letters = sum(c.isalpha() for c in line)
-    return (len(line) >= 14 and letters >= len(line) * 0.6
-            and len(line.split()) >= 4
-            and not re.search(r"\d{1,2}:\d{2}", line))
+    words = line.split()
+    if not (len(line) >= 14 and letters >= len(line) * 0.6
+            and len(words) >= 4
+            and not re.search(r"\d{1,2}:\d{2}", line)):
+        return False
+    # pure-punctuation tokens don't count; legit short headline words do
+    cores = [c for c in (re.sub(r"[^A-Za-z0-9]", "", w) for w in words) if c]
+    if len(cores) < 4:
+        return False
+    short = sum(1 for c in cores
+                if len(c) <= 2 and c.lower() not in _SHORT_OK)
+    full = sum(1 for c in cores if len(c) >= 4)
+    return short <= len(cores) * 0.3 and full >= len(cores) * 0.4
 
 
 def _tidy(text: str) -> str:
