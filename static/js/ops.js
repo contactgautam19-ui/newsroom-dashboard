@@ -1,6 +1,21 @@
 // Ops page: system health, controls, guardrail audit. Producers only.
 
 const Ops = (() => {
+  async function loadGuests() {
+    const el = document.getElementById('ops-guests');
+    if (!el) return;
+    let d;
+    try { d = await (await fetch('/api/guests')).json(); } catch { return; }
+    const rows = d.visitors || [];
+    el.innerHTML = rows.length ? `<table class="w-full text-[12.5px]"><thead><tr class="text-left text-[11.5px] text-sub">
+        <th class="py-1 pr-3 font-medium">Name</th><th class="py-1 pr-3 font-medium">Organisation</th><th class="py-1 pr-3 font-medium">Email</th>
+        <th class="py-1 pr-3 font-medium">From</th><th class="py-1 pr-3 font-medium">Visits</th><th class="py-1 font-medium">Last seen</th></tr></thead><tbody>` +
+      rows.map(v => `<tr class="border-t border-line text-ink"><td class="py-1.5 pr-3">${esc(v.name || '')}${v.verified ? '' : ' <span class="text-sub">(code not used)</span>'}</td>
+        <td class="py-1.5 pr-3">${esc(v.org || '—')}</td><td class="py-1.5 pr-3">${esc(v.email)}</td><td class="py-1.5 pr-3">${esc(v.source || 'direct')}</td>
+        <td class="py-1.5 pr-3">${v.visits}</td><td class="py-1.5">${ageLabel(v.last_seen)}</td></tr>`).join('') + '</tbody></table>'
+      : '<p>No guests yet.</p>';
+  }
+
   function metric(label, value) {
     return `<div class="bg-white border border-line rounded-xl p-3.5">
       <p class="text-[11.5px] text-sub">${esc(label)}</p>
@@ -35,6 +50,7 @@ const Ops = (() => {
           <p class="text-[11.5px]">↳ ${esc(t.discard_reason || '')}</p>
         </div>`).join('') || '<p>Nothing filtered recently.</p>';
 
+    loadGuests();
     const liveEl = document.getElementById('ops-live');
     if (liveEl) {
       const lm = d.live_monitor || {};

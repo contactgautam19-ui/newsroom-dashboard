@@ -290,15 +290,21 @@ def build_brief() -> tuple[str, str]:
 
 
 def send_email(subject: str, html: str) -> str | None:
-    """Returns an error string, or None on success."""
+    """Send the brief to the configured recipients. Returns an error string, or None."""
+    recipients = settings_store.get_recipients()
+    if not recipients:
+        return "no brief recipients configured"
+    return send_mail(recipients, subject, html)
+
+
+def send_mail(recipients: list[str], subject: str, html: str) -> str | None:
+    """Send an HTML email to explicit recipients. Returns an error string, or None."""
     if not config.EMAIL_ENABLED:
         return "email disabled (EMAIL_ENABLED=false)"
     if not config.GMAIL_ADDRESS or not config.GMAIL_APP_PASSWORD:
         return "missing GMAIL_ADDRESS / GMAIL_APP_PASSWORD"
-
-    recipients = settings_store.get_recipients()
     if not recipients:
-        return "no brief recipients configured"
+        return "no recipients"
 
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText

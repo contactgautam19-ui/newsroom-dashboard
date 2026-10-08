@@ -8,6 +8,7 @@ function esc(s) {
 
 async function api(path, method = 'POST') {
   const res = await fetch(path, { method });
+  if (res.status === 403 && document.body.classList.contains('guest')) guestNotice();
   return res.json();
 }
 
@@ -211,7 +212,32 @@ window.addEventListener('DOMContentLoaded', () => {
   if (initial && initial !== 'stories') Nav.go(initial);
   else Nav.go('stories');
   autoRefreshOnOpen();
+  applyRole();
 });
+
+// Guests (emailed-code sessions) get a read-only view: editor-only navigation
+// is hidden and the sidebar shows who they are.
+async function applyRole() {
+  let me = {};
+  try { me = await (await fetch('/api/me')).json(); } catch { return; }
+  if (me.role !== 'guest') return;
+  document.body.classList.add('guest');
+  const name = me.name || 'Guest';
+  document.getElementById('user-name').textContent = name;
+  document.getElementById('user-role').textContent = 'Guest · read-only';
+  document.getElementById('user-initial').textContent = name.trim()[0].toUpperCase();
+  if (['ops', 'npro'].includes(location.hash.replace('#', ''))) Nav.go('stories');
+}
+
+function guestNotice() {
+  if (document.getElementById('guest-notice')) return;
+  const n = document.createElement('div');
+  n.id = 'guest-notice';
+  n.textContent = 'Read-only guest view — that action is for editors.';
+  n.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0B1526;color:#fff;padding:11px 16px;border-radius:10px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:99';
+  document.body.appendChild(n);
+  setTimeout(() => n.remove(), 2800);
+}
 
 // Auto-refresh the story board once per page load if the last ingest is
 // missing or stale (>10 min), so the board is fresh the moment the app opens.

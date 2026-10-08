@@ -25,7 +25,7 @@ from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
                                StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 
-from app import broker, config, db, events, scheduler
+from app import broker, config, db, events, guest, scheduler
 from app.news import ingest
 from app.x.pipeline import pipeline, seed_handles_table
 
@@ -74,7 +74,11 @@ def _passcode_hash() -> str:
 
 # paths reachable without the cookie: the login flow, static assets, and the
 # cron endpoints (which carry their own secret)
-_AUTH_EXEMPT_PREFIXES = ("/login", "/api/login", "/static/", "/api/cron/")
+_AUTH_EXEMPT_PREFIXES = ("/login", "/api/login", "/static/", "/api/cron/", "/guest", "/api/guest/")
+# guests are read-only: GET only, except the two POSTs below (the board refresh
+# costs nothing and keeps the demo fresh; guest endpoints are their own flow)
+_GUEST_POST_ALLOW = ("/api/guest/", "/api/ingest")
+_GUEST_BLOCK = ("/api/settings", "/api/sim/", "/api/guests")
 
 
 @app.middleware("http")
@@ -85,6 +89,13 @@ async def passcode_gate(request: Request, call_next):
     if any(path == p or path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
         return await call_next(request)
     if request.cookies.get("nk_auth") == _passcode_hash():
+        return await call_next(request)
+    g = guest.parse_token(request.cookies.get(guest.COOKIE))
+    if g:
+        if (any(path.startswith(p) for p in _GUEST_BLOCK)
+                or (request.method != "GET" and not any(path.startswith(p) for p in _GUEST_POST_ALLOW))):
+            return JSONResponse({"error": "read-only guest"}, status_code=403)
+        request.state.guest = g
         return await call_next(request)
     # unauthenticated: JSON 401 for API calls, redirect to /login for browsers
     if path.startswith("/api/"):
@@ -105,6 +116,7 @@ _LOGIN_HTML = """<!DOCTYPE html>
     style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #cfd8e3;border-radius:8px;font-size:15px;margin-bottom:12px;">
   <button id="go" style="width:100%;padding:11px;border:0;border-radius:8px;background:#E02424;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">Enter newsroom</button>
   <div id="err" style="color:#E02424;font-size:13px;margin-top:12px;height:16px;"></div>
+  <a href="/guest" style="display:block;margin-top:14px;font-size:13px;color:#4B5563;text-decoration:none;">Visiting from the portfolio? <span style="color:#0B1526;font-weight:600;">Get read-only guest access →</span></a>
 </div>
 <script>
 const inp=document.getElementById('pc'),err=document.getElementById('err');
@@ -124,6 +136,111 @@ inp.addEventListener('keydown',e=>{if(e.key==='Enter')submit();});
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
     return _LOGIN_HTML
+
+
+_GUEST_HTML = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Newsroom — guest access</title>
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0B1526;font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#0B1526}
+  .card{background:#fff;border-radius:14px;padding:34px 36px;width:380px;max-width:calc(100vw - 32px);box-sizing:border-box;box-shadow:0 12px 40px rgba(0,0,0,.4)}
+  .brand{display:flex;align-items:center;gap:8px;margin-bottom:6px}.brand i{width:12px;height:12px;border-radius:50%;background:#E02424;display:inline-block}
+  .brand b{font-size:20px}.sub{font-size:13px;color:#6B7280;margin:0 0 18px}
+  label{display:block;font-size:12px;color:#6B7280;margin:10px 0 4px}
+  input{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #cfd8e3;border-radius:8px;font-size:15px}
+  input:focus{outline:2px solid #2563EB;border-color:transparent}
+  button{width:100%;margin-top:16px;padding:12px;border:0;border-radius:8px;background:#E02424;color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+  button[disabled]{opacity:.6;cursor:wait}
+  .err{color:#E02424;font-size:13px;margin-top:10px;min-height:16px}.note{font-size:12.5px;color:#6B7280;margin-top:14px;line-height:1.5}
+  .code{font-family:Consolas,Menlo,monospace;font-size:24px;letter-spacing:.3em;text-align:center}
+  .hidden{display:none}.link{background:none;color:#2563EB;font-weight:500;font-size:13px;margin-top:10px;padding:0}
+</style></head>
+<body>
+<div class="card">
+  <div class="brand"><i></i><b>Newsroom OS</b></div>
+  <p class="sub">Read-only guest access. A one-time code goes to your email.</p>
+  <form id="f1">
+    <label>Your name</label><input id="name" autocomplete="name" required maxlength="80">
+    <label>Work email</label><input id="email" type="email" autocomplete="email" required maxlength="160">
+    <label>Organisation <span style="color:#9CA3AF">(optional)</span></label><input id="org" autocomplete="organization" maxlength="120">
+    <button id="b1" type="submit">Email me a code</button>
+    <div id="e1" class="err"></div>
+    <p class="note">Guest sessions last 48 hours and can't change settings, spend API budget or publish. Gautam is notified when you enter.</p>
+  </form>
+  <form id="f2" class="hidden">
+    <p class="sub" id="sent"></p>
+    <label>6-digit code</label><input id="code" class="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required>
+    <button id="b2" type="submit">Enter the newsroom</button>
+    <div id="e2" class="err"></div>
+    <button type="button" class="link" id="again">Didn't get it? Send another code</button>
+  </form>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const src=new URLSearchParams(location.search).get('src')||'direct';
+async function post(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let d={};try{d=await r.json();}catch{}return {ok:r.ok&&d.ok,d};}
+$('f1').onsubmit=async e=>{e.preventDefault();$('e1').textContent='';$('b1').disabled=true;
+  const {ok,d}=await post('/api/guest/request',{name:$('name').value,email:$('email').value,org:$('org').value,source:src});
+  $('b1').disabled=false;
+  if(!ok){$('e1').textContent=d.error||'Something went wrong.';return;}
+  $('sent').textContent='Code sent to '+$('email').value.trim()+'. Check spam if it takes a minute.';
+  if(d.dev_code){$('code').value=d.dev_code;}
+  $('f1').classList.add('hidden');$('f2').classList.remove('hidden');$('code').focus();};
+$('f2').onsubmit=async e=>{e.preventDefault();$('e2').textContent='';$('b2').disabled=true;
+  const {ok,d}=await post('/api/guest/verify',{email:$('email').value,code:$('code').value});
+  $('b2').disabled=false;
+  if(!ok){$('e2').textContent=d.error||'Wrong code.';$('code').select();return;}
+  location.href='/#stories';};
+$('again').onclick=()=>{$('f2').classList.add('hidden');$('f1').classList.remove('hidden');};
+</script>
+</body></html>"""
+
+
+@app.get("/guest", response_class=HTMLResponse)
+def guest_page():
+    return _GUEST_HTML
+
+
+@app.post("/api/guest/request")
+def guest_request(request: Request, payload: dict = Body(...)):
+    try:
+        return guest.request_code(payload.get("name", ""), payload.get("email", ""),
+                                  payload.get("org", ""), payload.get("source", ""),
+                                  request.headers.get("user-agent", ""))
+    except guest.GuestError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+
+@app.post("/api/guest/verify")
+def guest_verify(request: Request, payload: dict = Body(...)):
+    try:
+        visitor = guest.verify_code(payload.get("email", ""), payload.get("code", ""),
+                                    request.headers.get("user-agent", ""))
+    except guest.GuestError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    resp = JSONResponse({"ok": True, "name": visitor.get("name", "")})
+    resp.set_cookie(guest.COOKIE, guest.make_token(visitor["email"], visitor.get("name", "")),
+                    max_age=guest.SESSION_HOURS * 3600, httponly=True, samesite="lax",
+                    secure=config.IS_SERVERLESS)
+    return resp
+
+
+@app.get("/api/me")
+def whoami(request: Request):
+    """Who is looking: the editor (passcode cookie) or a read-only guest."""
+    if not config.PASSCODE or request.cookies.get("nk_auth") == _passcode_hash():
+        return {"role": "editor"}
+    g = getattr(request.state, "guest", None)
+    if g:
+        return {"role": "guest", "name": g["name"], "email": g["email"]}
+    return {"role": "anonymous"}
+
+
+@app.get("/api/guests")
+def guests_list(request: Request):
+    if getattr(request.state, "guest", None):
+        return JSONResponse({"error": "read-only guest"}, status_code=403)
+    return {"visitors": guest.list_visitors()}
 
 
 @app.post("/api/login")

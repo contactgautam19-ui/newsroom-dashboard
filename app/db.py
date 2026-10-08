@@ -151,6 +151,29 @@ CREATE TABLE IF NOT EXISTS live_onair (
     last_seen TEXT NOT NULL,
     source TEXT NOT NULL DEFAULT 'title'       -- ocr | x | title | web
 );
+
+CREATE TABLE IF NOT EXISTS guest_otps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    used INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS guest_visitors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    org TEXT,
+    source TEXT,                               -- e.g. 'portfolio'
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    visits INTEGER NOT NULL DEFAULT 0,
+    verified INTEGER NOT NULL DEFAULT 0,
+    user_agent TEXT
+);
 """
 
 
