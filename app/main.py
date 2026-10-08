@@ -764,3 +764,9 @@ def index():
 
 
 app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
+
+
+# Vercel serves this module directly and passes the rewritten path; restore the
+# real one before routing (see app/asgi_path.py). Must stay the last statement.
+from app.asgi_path import RestoreOriginalPath  # noqa: E402
+app = RestoreOriginalPath(app)
