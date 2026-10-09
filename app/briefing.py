@@ -297,8 +297,23 @@ def send_email(subject: str, html: str) -> str | None:
     return send_mail(recipients, subject, html)
 
 
+def _plain_text(html: str) -> str:
+    """A readable text version of an HTML email."""
+    import html as html_mod
+    import re
+    text = re.sub(r"(?is)<(style|script)[^>]*>.*?</\1>", "", html)
+    text = re.sub(r"(?i)<br\s*/?>|</(p|div|tr|h[1-6]|li|table)>", "\n", text)
+    text = html_mod.unescape(re.sub(r"<[^>]+>", "", text))
+    return re.sub(r"\n\s*\n+", "\n\n", re.sub(r"[ \t]+", " ", text)).strip()
+
+
 def send_mail(recipients: list[str], subject: str, html: str) -> str | None:
-    """Send an HTML email to explicit recipients. Returns an error string, or None."""
+    """Send an HTML email to explicit recipients. Returns an error string, or None.
+
+    The message is built the way a mail client would build it — named sender,
+    Date and Message-ID headers, and a plain-text part beside the HTML. A bare
+    HTML-only message with no date is a classic spam signal, and one-time codes
+    that land in spam look to the visitor like they were never sent."""
     if not config.EMAIL_ENABLED:
         return "email disabled (EMAIL_ENABLED=false)"
     if not config.GMAIL_ADDRESS or not config.GMAIL_APP_PASSWORD:
@@ -309,11 +324,17 @@ def send_mail(recipients: list[str], subject: str, html: str) -> str | None:
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
 
+    from email.utils import formataddr, formatdate, make_msgid
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = config.GMAIL_ADDRESS
+    msg["From"] = formataddr(("Echo", config.GMAIL_ADDRESS))
     msg["To"] = ", ".join(recipients)
-    msg.attach(MIMEText(html, "html"))
+    msg["Reply-To"] = config.GMAIL_ADDRESS
+    msg["Date"] = formatdate(localtime=False)
+    msg["Message-ID"] = make_msgid(domain=config.GMAIL_ADDRESS.split("@")[-1])
+    msg.attach(MIMEText(_plain_text(html), "plain", "utf-8"))   # plain first, HTML preferred
+    msg.attach(MIMEText(html, "html", "utf-8"))
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465,
                               context=ssl.create_default_context()) as server:

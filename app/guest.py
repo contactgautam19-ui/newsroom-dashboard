@@ -17,6 +17,8 @@ import secrets
 import time
 from datetime import datetime, timedelta, timezone
 
+from html import escape as html_escape
+
 from app import config, db
 
 log = logging.getLogger("newsroom.guest")
@@ -188,7 +190,7 @@ def request_code(name: str, email: str, org: str, source: str, user_agent: str) 
 
     from app import briefing
     html = _code_email(name, code)
-    err = briefing.send_mail([email], f"Your Echo guest code: {code}", html)
+    err = briefing.send_mail([email], "Your Echo demo access code", html)
     if err is None:
         return {"ok": True}
     if not config.EMAIL_ENABLED and not config.IS_SERVERLESS:
@@ -243,6 +245,7 @@ def list_visitors(limit: int = 100) -> list[dict]:
 # emails
 # --------------------------------------------------------------------------
 def _code_email(name: str, code: str) -> str:
+    name = html_escape(name)
     return f"""<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:480px;margin:0 auto;padding:28px 24px;color:#111">
   <p style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#888;margin:0 0 14px">Echo · guest access</p>
   <p style="font-size:16px;margin:0 0 18px">Hi {name}, here is your one-time code:</p>
@@ -260,6 +263,9 @@ def _notify_editor(v: dict) -> None:
             return
         when = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
         org = f" ({v.get('org')})" if v.get("org") else ""
+        subject = f"Guest entered Echo: {v.get('name') or v.get('email')}{org}"
+        v = {k: html_escape(str(val)) if isinstance(val, str) else val for k, val in v.items()}
+        org = html_escape(org)
         html = f"""<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
   <p style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#888;margin:0 0 12px">Echo · guest entered</p>
   <p style="font-size:18px;margin:0 0 14px"><strong>{v.get('name') or v.get('email')}</strong>{org} just opened the dashboard.</p>
@@ -271,7 +277,6 @@ def _notify_editor(v: dict) -> None:
   </table>
   <p style="font-size:13px;color:#888;margin:18px 0 0">Demo sessions last 15 minutes with metered X and N-Pro use. The full list is on the Ops desk.</p>
 </div>"""
-        subject = f"Guest entered Echo: {v.get('name') or v.get('email')}{org}"
         err = briefing.send_mail(to, subject, html)
         if err:
             log.warning("guest notification failed: %s", err)

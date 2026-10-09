@@ -239,7 +239,7 @@ $('f1').onsubmit=async e=>{e.preventDefault();$('e1').textContent='';$('b1').dis
   const {ok,d}=await post('/api/guest/request',{name:$('name').value,email:$('email').value,org:$('org').value,source:src});
   $('b1').disabled=false;
   if(!ok){$('e1').textContent=d.error||'Something went wrong.';return;}
-  $('sent').textContent='Code sent to '+$('email').value.trim()+'. Check spam if it takes a minute.';
+  $('sent').textContent='Code sent to '+$('email').value.trim()+' from contactgautam19@gmail.com, subject \u201cYour Echo demo access code\u201d. If it is not in your inbox within a minute, look in Spam and Promotions.';
   if(d.dev_code){$('code').value=d.dev_code;}
   $('f1').classList.add('hidden');$('f2').classList.remove('hidden');$('code').focus();};
 $('f2').onsubmit=async e=>{e.preventDefault();$('e2').textContent='';$('b2').disabled=true;
