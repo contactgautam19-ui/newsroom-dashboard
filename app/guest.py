@@ -29,7 +29,7 @@ OTP_MAX_ATTEMPTS = 5
 PER_EMAIL_PER_HOUR = 3        # codes one address may request per hour
 GLOBAL_PER_HOUR = 40          # codes the endpoint will send per hour in total
 SESSION_MINUTES = 15          # a demo sitting; the cookie and token both expire
-SESSIONS_PER_DAY = 2          # sittings one address may start in 24 hours
+SESSIONS_PER_DAY = 5          # sittings one address may start in 24 hours
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 
