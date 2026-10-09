@@ -8,16 +8,16 @@ const XDesk = (() => {
   let signalsOnly = false;
 
   const GROUPS = {
-    A: { label: 'Government & wires', color: '#079455' },
-    B: { label: 'Rivals', color: '#DC6803' },
-    C: { label: 'Field reporters', color: '#2563EB' },
+    A: { label: 'Government & wires', color: '#34C38A' },
+    B: { label: 'Rivals', color: '#F0A93B' },
+    C: { label: 'Field reporters', color: '#8FB4E8' },
   };
 
   function trustColor(score) {
     return score >= 90 ? 'text-green6' : score >= 70 ? 'text-blue6' : 'text-amber6';
   }
 
-  const AVATAR_COLORS = ['#2563EB', '#079455', '#DC6803', '#7A5AF8', '#DD2590'];
+  const AVATAR_COLORS = ['#8FB4E8', '#34C38A', '#F0A93B', '#A99BFF', '#F27DB8'];
 
   function avatarHtml(t, i) {
     const letter = (t.display_name || t.handle || '?').replace('@', '').charAt(0).toUpperCase();
@@ -31,7 +31,7 @@ const XDesk = (() => {
   }
 
   function tweetCard(t, i) {
-    const grp = GROUPS[t.stream_column] || { label: t.stream_column || '', color: '#667085' };
+    const grp = GROUPS[t.stream_column] || { label: t.stream_column || '', color: '#8C9AB0' };
     return `
       <div class="fade-up bg-white border border-line rounded-2xl px-4 py-3 flex items-start gap-3" style="border-left:3px solid ${grp.color}">
         ${avatarHtml(t, i)}
@@ -69,10 +69,10 @@ const XDesk = (() => {
     const groupChips = chips.map(c => {
       const active = c.key === groupFilter;
       return `<button onclick="XDesk.setGroupFilter('${c.key}')" class="px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold border bg-white text-sub hover:border-ink"
-        ${active ? 'style="background:#0B1526;color:#fff;border-color:#0B1526"' : ''}>${esc(c.label)}</button>`;
+        ${active ? 'style="background:#EEF1F6 !important;color:#05080F !important;border-color:#EEF1F6"' : ''}>${esc(c.label)}</button>`;
     }).join('');
     const signalChip = `<button onclick="XDesk.toggleSignalsOnly()" class="px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold border bg-white text-sub hover:border-ink"
-      ${signalsOnly ? 'style="background:#0B1526;color:#fff;border-color:#0B1526"' : ''}>News signals only</button>`;
+      ${signalsOnly ? 'style="background:#EEF1F6 !important;color:#05080F !important;border-color:#EEF1F6"' : ''}>News signals only</button>`;
     el.innerHTML = groupChips + signalChip;
   }
 
@@ -85,24 +85,44 @@ const XDesk = (() => {
       : '<p class="text-sub text-[14px] py-6 text-center">No posts match this filter yet.</p>';
   }
 
+  // Tells the editor how current the feed is — posts only arrive on a refresh.
+  function renderFreshness() {
+    const el = document.getElementById('x-freshness');
+    if (!el) return;
+    el.textContent = allTweets.length ? `· newest ${postedLabel(allTweets[0].created_at)}` : '';
+  }
+
   function render() {
     renderFilters();
     renderFeed();
+    renderFreshness();
   }
 
   function setGroupFilter(f) { groupFilter = f; render(); }
 
   function toggleSignalsOnly() { signalsOnly = !signalsOnly; render(); }
 
-  function add(t) {
-    allTweets.unshift(t);
-    if (allTweets.length > MAX_TWEETS) allTweets.length = MAX_TWEETS;
+  // Strictly by post time, newest first — arrival order is not post order.
+  function setTweets(list) {
+    const byId = new Map();
+    list.forEach(t => { if (t && t.id != null && !byId.has(String(t.id))) byId.set(String(t.id), t); });
+    allTweets = [...byId.values()]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, MAX_TWEETS);
     render();
+  }
+
+  function add(t) { setTweets([t, ...allTweets]); }
+
+  async function loadFeed() {
+    const tweets = await (await fetch('/api/tweets', { cache: 'no-store' })).json();
+    if (Array.isArray(tweets)) setTweets(tweets);
   }
 
   function budget(r) {
     const el = document.getElementById('x-budget');
-    if (el && r && r.monthly_remaining != null) {
+    // the account's monthly budget is the editor's business, not a demo guest's
+    if (el && r && r.monthly_remaining != null && !document.body.classList.contains('guest')) {
       el.textContent = `${r.monthly_remaining} API calls left this month`;
     }
   }
@@ -112,26 +132,44 @@ const XDesk = (() => {
     if (el) el.textContent = text || '';
   }
 
+  // Demo guests get a small number of live pulls; show what is left.
+  const BTN_LABEL = '𝕏 Refresh tweets';
+  function guestPulls(left) {
+    const btn = document.getElementById('x-refresh-btn');
+    if (!btn || left == null) return;
+    btn.dataset.label = `${BTN_LABEL} · ${left} demo pull${left === 1 ? '' : 's'} left`;
+    if (!btn.disabled) btn.textContent = btn.dataset.label;
+  }
+
   async function refresh() {
     const btn = document.getElementById('x-refresh-btn');
-    const orig = btn.textContent;
+    const orig = btn.dataset.label || BTN_LABEL;
     btn.disabled = true;
     btn.textContent = '𝕏 fetching…';
     try {
       const r = await api('/api/x/refresh');
       budget(r);
+      if (r.guest_pulls_left != null) guestPulls(r.guest_pulls_left);
+      else if (r.limit_reached && r.x != null) guestPulls(r.x);
       btn.textContent = r.ok ? `𝕏 +${r.tweets_new} tweets` : '𝕏 failed';
-      note(r.ok ? 'stories re-ranking with fresh tweets…' : (r.error || ''));
-      if (r.ok) loadSignals();
+      note(r.ok
+        ? (r.tweets_new ? 'stories re-ranking with fresh tweets…' : 'No new posts from monitored handles since the last refresh.')
+        : (r.error || ''));
+      if (r.ok) {
+        // pull the stored feed straight away — without a live stream the new
+        // posts would otherwise not show until the next background poll
+        await loadFeed().catch(() => {});
+        loadSignals();
+      }
     } catch {
       btn.textContent = '𝕏 failed';
     } finally {
-      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2500);
+      setTimeout(() => { btn.disabled = false; btn.textContent = btn.dataset.label || orig; }, 2500);
     }
   }
   document.getElementById('x-refresh-btn').addEventListener('click', refresh);
 
-  const SIGNAL_AVATAR_COLORS = ['#2563EB', '#079455', '#DC6803', '#7A5AF8', '#DD2590'];
+  const SIGNAL_AVATAR_COLORS = ['#8FB4E8', '#34C38A', '#F0A93B', '#A99BFF', '#F27DB8'];
 
   function signalAvatarHtml(s, i) {
     const letter = (s.display_name || s.handle || '?').replace('@', '').charAt(0).toUpperCase();
@@ -148,13 +186,13 @@ const XDesk = (() => {
   function signalCard(s, rank) {
     const chips = (s.reasons || []).map(r => {
       if (r === 'matches a board story' && s.linked_story) {
-        return `<button onclick="Nav.go('stories');setTimeout(()=>{const c=document.querySelector('article[data-id=\\'${s.linked_story.story_id}\\']');if(c){c.scrollIntoView({behavior:'smooth',block:'center'});c.style.outline='2px solid #2563EB';setTimeout(()=>c.style.outline='',2500);}},150)"
+        return `<button onclick="Nav.go('stories');setTimeout(()=>{const c=document.querySelector('article[data-id=\\'${s.linked_story.story_id}\\']');if(c){c.scrollIntoView({behavior:'smooth',block:'center'});c.style.outline='2px solid #8FB4E8';setTimeout(()=>c.style.outline='',2500);}},150)"
           class="px-2 py-1 rounded-lg bg-blue1 text-blue8 text-[11.5px] font-medium hover:bg-blue6 hover:text-white transition-colors" title="${esc(s.linked_story.story_title)}">↗ matches a board story</button>`;
       }
       return `<span class="px-2 py-1 rounded-lg bg-paper text-sub text-[11.5px] font-medium">${esc(r)}</span>`;
     }).join('');
     return `
-      <div class="fade-up bg-white border border-line rounded-2xl px-4 py-3 flex items-start gap-3.5" style="border-left:4px solid #2563EB">
+      <div class="fade-up bg-white border border-line rounded-2xl px-4 py-3 flex items-start gap-3.5" style="border-left:4px solid #8FB4E8">
         <span class="text-[13px] font-bold text-sub w-3 shrink-0 pt-2.5">${rank}</span>
         ${signalAvatarHtml(s, rank - 1)}
         <div class="min-w-0 flex-1">
@@ -181,11 +219,7 @@ const XDesk = (() => {
 
   async function backfill() {
     loadSignals();
-    try {
-      const tweets = await (await fetch('/api/tweets')).json();
-      allTweets = tweets.slice(0, MAX_TWEETS); // already newest-first
-      render();
-    } catch { /* stream fills it */ }
+    try { await loadFeed(); } catch { /* stream fills it */ }
     try {
       const s = await (await fetch('/api/x/status')).json();
       budget(s);
@@ -194,5 +228,5 @@ const XDesk = (() => {
   }
   backfill();
 
-  return { add, budget, note, refresh, loadSignals, setGroupFilter, toggleSignalsOnly };
+  return { add, budget, note, refresh, loadSignals, setGroupFilter, toggleSignalsOnly, guestPulls };
 })();

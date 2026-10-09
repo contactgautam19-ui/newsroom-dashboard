@@ -10,22 +10,17 @@ const LiveCoverage = (() => {
   let autoTriggered = false;
 
   const CHANNEL_COLORS = {
-    'NDTV 24x7': '#D92D20', 'India Today': '#2563EB', 'Times Now': '#7A5AF8',
-    'Republic TV': '#DC6803', 'CNN-News18': '#0E9384', 'WION': '#DD2590',
+    'NDTV 24x7': '#EC4A4D', 'India Today': '#8FB4E8', 'Times Now': '#A99BFF',
+    'Republic TV': '#F0A93B', 'CNN-News18': '#4CC9B8', 'WION': '#F27DB8',
   };
-  const accent = c => CHANNEL_COLORS[c] || '#667085';
+  const accent = c => CHANNEL_COLORS[c] || '#8C9AB0';
 
   function itemLine(it) {
     const tag = it.breaking
       ? '<span class="shrink-0 px-1.5 py-0.5 rounded bg-red6 text-white text-[9.5px] font-bold tracking-wide">BREAKING</span> '
       : '';
-    // via: 'ocr' = read off the live player (default), 'x' = channel's own
-    // aired-story post — mark the X ones so editors know the provenance
-    const via = it.via === 'x'
-      ? ' <span class="text-sub text-[10px] font-semibold" title="From the channel\'s X post of the aired segment">𝕏</span>'
-      : '';
     return `<li class="text-[13px] leading-snug flex gap-1.5 items-start">
-      <span class="text-sub">·</span><span>${tag}${esc(it.headline)}${via}</span></li>`;
+      <span class="text-sub">·</span><span>${tag}${esc(it.headline)}</span></li>`;
   }
 
   function channelBlock(c) {

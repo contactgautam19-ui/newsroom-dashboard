@@ -61,6 +61,9 @@ SIM_TWEETS_PER_MIN = _int("SIM_TWEETS_PER_MIN", 12)
 TWT_API_KEY = os.getenv("TWT_API_KEY", "")
 TWT_API_BASE = os.getenv("TWT_API_BASE", "https://api.twtapi.com/api/v1/twitter")
 TWT_STATUS_URL = os.getenv("TWT_STATUS_URL", "https://api.twtapi.com/myapi/status")
+# YouTube Data API v3 key (Hyper Search: most-popular News & Politics videos).
+# Free quota: 10,000 units/day, one unit per scan. Empty = YouTube is skipped.
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
 X_HANDLES_PER_COLUMN = _int("X_HANDLES_PER_COLUMN", 20)  # top-trust handles searched per column
 
 # Keyword-driven fresh-story discovery (mirrors the manual editor workflow:

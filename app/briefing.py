@@ -98,7 +98,7 @@ BRIEF_TEMPLATE = _env.from_string("""\
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
     <tr><td style="font-size:16px;font-weight:bold;color:#ffffff;">
       <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#E11D2E;margin-right:8px;"></span>
-      Newsroom hourly rundown
+      Echo hourly rundown
     </td></tr>
     <tr><td style="font-size:12px;color:#9AA5B1;padding-top:6px;">
       {{ generated_at }} IST &middot; for editorial decision — nothing publishes without your sign-off
@@ -274,7 +274,7 @@ def build_brief() -> tuple[str, str]:
 
     time_str = f"{now:%d %b %I:%M}".replace(" 0", " ")
     subject = (
-        f"Newsroom rundown — {len(stories)} stories, {n_breaking} breaking, "
+        f"Echo rundown — {len(stories)} stories, {n_breaking} breaking, "
         f"{n_ready} ready to publish — {time_str}"
     )
 

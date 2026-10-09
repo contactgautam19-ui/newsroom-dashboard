@@ -35,15 +35,15 @@ function postedLabel(iso) {
 const Nav = (() => {
   const VIEWS = {
     stories: { page: 'page-stories', nav: 'stories', title: 'Story Desk', subtitle: 'Your command center for real-time editorial decisions.' },
-    top: { page: 'page-stories', nav: 'top', title: 'Top Stories', subtitle: 'The full ranked board, highest score first.', filter: 'All' },
     picks: { page: 'page-stories', nav: 'picks', title: 'My Picks', subtitle: 'Stories you have taken for coverage.', filter: 'Picked' },
-    assignments: { page: 'page-stories', nav: 'assignments', title: 'Assignments', subtitle: 'Everything currently being worked on.', filter: 'Picked' },
+    hyper: { page: 'page-hyper', nav: 'hyper', title: 'Hyper Search', subtitle: 'Production deck from the last 24 hours.' },
+    social: { page: 'page-social', nav: 'social', title: 'Social Monitor', subtitle: 'Trending on Google, YouTube and X.' },
     xdesk: { page: 'page-xdesk', nav: 'xdesk', title: 'X Desk', subtitle: 'Real posts from monitored handles, ranked for action.' },
     ops: { page: 'page-ops', nav: 'ops', title: 'Ops Desk', subtitle: 'System health, controls, and guardrail audit.' },
     analytics: { page: 'page-analytics', nav: 'analytics', title: 'Analytics', subtitle: 'Board balance and scoring anatomy.' },
     alerts: { page: 'page-alerts', nav: 'alerts', title: 'Alerts', subtitle: 'Breaking flashes and viral acceleration events.' },
   };
-  const PAGES = ['page-stories', 'page-xdesk', 'page-ops', 'page-analytics', 'page-alerts'];
+  const PAGES = ['page-stories', 'page-hyper', 'page-social', 'page-xdesk', 'page-ops', 'page-analytics', 'page-alerts'];
   let current = 'stories';
 
   function go(name) {
@@ -55,7 +55,7 @@ const Nav = (() => {
     document.querySelectorAll('.navlink').forEach(b => {
       b.classList.remove('active', 'active-soft');
       if (b.dataset.nav === v.nav) {
-        b.classList.add(['stories', 'xdesk', 'ops'].includes(v.nav) ? 'active' : 'active-soft');
+        b.classList.add(['stories', 'hyper', 'social', 'xdesk', 'ops'].includes(v.nav) ? 'active' : 'active-soft');
       }
     });
     if (v.filter) StoryDesk.setFilter(v.filter);
@@ -63,6 +63,8 @@ const Nav = (() => {
     if (name === 'ops') Ops.load();
     if (name === 'analytics') Views.analytics();
     if (name === 'alerts') Views.alerts();
+    if (name === 'hyper') Hyper.open();
+    if (name === 'social') Social.open();
     if (window.innerWidth < 1024) hideSidebar();
     location.hash = name;
   }
@@ -90,7 +92,7 @@ function setLive(state) {
   const dot = document.getElementById('live-dot');
   const label = document.getElementById('live-label');
   if (!dot) return;
-  dot.style.background = state === 'live' ? '#079455' : state === 'busy' ? '#DC6803' : '#D92D20';
+  dot.style.background = state === 'live' ? '#34C38A' : state === 'busy' ? '#F0A93B' : '#EC4A4D';
   label.textContent = state === 'live' ? 'Live' : state === 'busy' ? 'Refreshing' : 'Offline';
 }
 
@@ -109,7 +111,7 @@ const Toast = (() => {
     if (el) return el;
     el = document.createElement('div');
     el.id = 'toast';
-    el.className = 'fade-up fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-navy text-white rounded-xl px-4 py-2.5 text-[13px] shadow-lg hidden mb-[env(safe-area-inset-bottom)]';
+    el.className = 'fade-up fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-full px-5 py-2.5 text-[13px] font-medium shadow-lg hidden mb-[env(safe-area-inset-bottom)]';
     document.body.appendChild(el);
     return el;
   }
@@ -119,7 +121,8 @@ const Toast = (() => {
     const node = ensure();
     clearTimeout(timer);
     node.innerHTML = `<span>${esc(message)}</span>` +
-      (actionLabel ? `<button class="ml-3 underline font-semibold hover:text-white/80">${esc(actionLabel)}</button>` : '');
+      (actionLabel ? `<button class="ml-3 underline font-semibold hover:opacity-70">${esc(actionLabel)}</button>` : '');
+    node.style.background = '#EEF1F6'; node.style.color = '#05080F';
     node.classList.remove('hidden');
     node.classList.add('flex', 'items-center');
     node.style.animation = 'none';
@@ -161,8 +164,8 @@ function bumpAlerts() {
 // Flash strip: slides down for new breaking stories and viral X spikes.
 const Flash = (() => {
   const KINDS = {
-    breaking: { badge: 'FLASH · BREAKING', bg: '#D92D20' },
-    viral: { badge: 'VIRAL ON X', bg: '#2563EB' },
+    breaking: { badge: 'FLASH · BREAKING', bg: '#EC4A4D' },
+    viral: { badge: 'VIRAL ON X', bg: '#8FB4E8' },
   };
   const recent = new Map();
   let timer = null;
@@ -191,6 +194,8 @@ const Flash = (() => {
     document.getElementById('flash-strip').classList.add('hidden');
   }
 
+  function jumpTo(id) { targetId = id; jump(); }
+
   function jump() {
     hide();
     Nav.go('stories');
@@ -198,13 +203,13 @@ const Flash = (() => {
       const card = document.querySelector(`article[data-id="${targetId}"]`);
       if (card) {
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        card.style.outline = '2px solid #2563EB';
+        card.style.outline = '2px solid #8FB4E8';
         setTimeout(() => { card.style.outline = ''; }, 2500);
       }
     }
   }
 
-  return { show, hide, jump };
+  return { show, hide, jump, jumpTo };
 })();
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -215,26 +220,46 @@ window.addEventListener('DOMContentLoaded', () => {
   applyRole();
 });
 
-// Guests (emailed-code sessions) get a read-only view: editor-only navigation
-// is hidden and the sidebar shows who they are.
+// Guests (emailed-code sessions) get a demo view: the Ops desk is hidden, the
+// paid features are metered (3 live X pulls, a capped number of N-Pro
+// requests) and the sidebar shows who they are.
+let guestQuota = null; // {x, ai} remaining for a guest; null for editors
 async function applyRole() {
   let me = {};
   try { me = await (await fetch('/api/me')).json(); } catch { return; }
   if (me.role !== 'guest') return;
   document.body.classList.add('guest');
+  guestQuota = me.quota || null;
   const name = me.name || 'Guest';
   document.getElementById('user-name').textContent = name;
-  document.getElementById('user-role').textContent = 'Guest · read-only';
+  document.getElementById('user-role').textContent = 'Guest · demo access';
   document.getElementById('user-initial').textContent = name.trim()[0].toUpperCase();
-  if (['ops', 'npro'].includes(location.hash.replace('#', ''))) Nav.go('stories');
+  if (location.hash.replace('#', '') === 'ops') Nav.go('stories');
+  if (typeof XDesk !== 'undefined') XDesk.guestPulls(guestQuota ? guestQuota.x : null);
+  if (me.expires_at) guestCountdown(me.expires_at * 1000);
+}
+
+// A demo sitting is 15 minutes: show the time left, then hand the guest back
+// to the guest page rather than leaving them on a dashboard that stopped working.
+function guestCountdown(expiresMs) {
+  const role = document.getElementById('user-role');
+  const tick = () => {
+    const left = Math.round((expiresMs - Date.now()) / 1000);
+    if (left <= 0) { location.href = '/guest?ended=1'; return; }
+    role.textContent = `Demo · ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} left`;
+    role.style.color = left <= 120 ? '#FDA29B' : '';
+    if (left === 120) Toast.show('Your demo session ends in 2 minutes.');
+  };
+  tick();
+  setInterval(tick, 1000);
 }
 
 function guestNotice() {
   if (document.getElementById('guest-notice')) return;
   const n = document.createElement('div');
   n.id = 'guest-notice';
-  n.textContent = 'Read-only guest view — that action is for editors.';
-  n.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0B1526;color:#fff;padding:11px 16px;border-radius:10px;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:99';
+  n.textContent = 'Demo access — that action is for editors.';
+  n.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#EEF1F6;color:#05080F;padding:11px 18px;border-radius:999px;font-weight:600;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:99';
   document.body.appendChild(n);
   setTimeout(() => n.remove(), 2800);
 }

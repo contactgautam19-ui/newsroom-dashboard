@@ -144,4 +144,14 @@ def top_signals() -> list[dict]:
         })
 
     scored.sort(key=lambda s: (-s["score"], s["created_at"]))
-    return scored[:TOP_N]
+    # one slot per handle — a prolific account must not crowd out the rest
+    top, seen_handles = [], set()
+    for s in scored:
+        key = s["handle"].lower()
+        if key in seen_handles:
+            continue
+        seen_handles.add(key)
+        top.append(s)
+        if len(top) == TOP_N:
+            break
+    return top

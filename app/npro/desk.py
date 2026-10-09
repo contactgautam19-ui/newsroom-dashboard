@@ -24,6 +24,11 @@ def _age(iso: str) -> str:
         return "?"
 
 
+_PHASE = {"breaking_now": "HAPPENING NOW, corroborated",
+          "just_in": "just in, single source",
+          "followup": "new article on an OLDER story"}
+
+
 def _board_lines(limit: int = 12) -> list[str]:
     from app.news import ingest
     lines = ["RANKED BOARD (our scored stories, highest first):"]
@@ -45,7 +50,8 @@ def _board_lines(limit: int = 12) -> list[str]:
             flags.append("already picked")
         lines.append(
             f"{i}. [{s.get('score', 0)}/100 {s.get('status', '')}] "
-            f"{s.get('title', '')} ({_age(s.get('published_at', ''))} old"
+            f"{s.get('title', '')} ({_age(s.get('published_at', ''))} old; "
+            f"{_PHASE.get(s.get('event_phase'), 'phase unknown')}"
             + (f"; {'; '.join(flags)}" if flags else "") + ")")
     return lines
 
@@ -58,9 +64,10 @@ def _x_lines(limit: int = 5) -> list[str]:
     lines = ["TOP X SIGNALS (monitored handles, ranked):"]
     for t in sigs:
         reasons = ", ".join(t.get("reasons") or [])
-        linked = t.get("linked") or {}
+        linked = t.get("linked_story") or {}
         link = f" -> board story: {linked['story_title']}" if linked.get("story_title") else ""
-        lines.append(f"- {t.get('handle', '')}: {(t.get('text') or '')[:120]}"
+        lines.append(f"- {t.get('handle', '')} ({_age(t.get('created_at', ''))} ago): "
+                     f"{(t.get('summary') or '')[:140]}"
                      f" ({reasons}){link}")
     return lines
 

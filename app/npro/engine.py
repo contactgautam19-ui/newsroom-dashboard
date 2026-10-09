@@ -104,8 +104,31 @@ def _call(system: str, user: str, max_tokens: int = MAX_TOKENS,
 
 # ── context assembly ───────────────────────────────────────────────────────
 
+def _age_label(iso: str) -> str:
+    """'25m ago' / '6h ago' / '3d ago' — how old a piece of reporting is."""
+    from datetime import datetime, timezone
+    try:
+        mins = int((datetime.now(timezone.utc)
+                    - datetime.fromisoformat(iso)).total_seconds() // 60)
+    except (TypeError, ValueError):
+        return ""
+    if mins < 0:
+        return ""
+    if mins < 60:
+        return f"{mins}m ago"
+    if mins < 2880:
+        return f"{mins // 60}h ago"
+    return f"{mins // 1440}d ago"
+
+
 def context_block(story: dict | None, retrieved: list[dict]) -> str:
-    lines = ["REPORTING AVAILABLE — draft only from what is below.", ""]
+    from datetime import datetime, timedelta, timezone
+    now_ist = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    lines = ["REPORTING AVAILABLE — draft only from what is below.",
+             f"Current time: {now_ist.strftime('%d %b %Y, %I:%M %p')} IST. Each item "
+             "shows how long ago it was published. Lead with the newest "
+             "developments; anything older than a day is background and must "
+             "never be presented as a fresh development.", ""]
     if story:
         lines.append(f"Lead story: {story.get('title', '')}")
         if story.get("publisher"):
@@ -117,10 +140,11 @@ def context_block(story: dict | None, retrieved: list[dict]) -> str:
             lines.append(f"- {e}")
         lines.append("")
     if retrieved:
-        lines.append("Recent reporting from multiple publishers:")
+        lines.append("Reporting from multiple publishers (newest first):")
         for a in retrieved[:12]:
             pub = a.get("publisher") or ""
-            lines.append(f"- [{pub}] {a.get('title', '')}"
+            age = _age_label(a.get("published_at", ""))
+            lines.append(f"- [{pub}{' · ' + age if age else ''}] {a.get('title', '')}"
                          + (f" — {a['summary']}" if a.get("summary") else ""))
     return "\n".join(lines)
 
@@ -206,27 +230,22 @@ def latest_keyword(query: str) -> str | None:
     return kw if 1 < len(kw) <= 60 else None
 
 
-def _mins_ago(iso: str) -> str:
-    from datetime import datetime, timezone
-    try:
-        m = int((datetime.now(timezone.utc)
-                 - datetime.fromisoformat(iso)).total_seconds() // 60)
-        return f"{m}m ago" if m >= 0 else ""
-    except (TypeError, ValueError):
-        return ""
-
-
-def past_hour_brief(keyword: str, items: list[dict]) -> str:
+def past_hour_brief(keyword: str, items: list[dict], widened: bool = False) -> str:
     """Deterministic 'past hour' headline pull for a keyword: the freshest 5
-    headlines + source, no LLM needed."""
-    head = f'**Latest on "{keyword}" — past hour**'
+    headlines + source, no LLM needed. ``widened`` means nothing was filed in
+    the last hour and ``items`` are the newest from the past 24 hours."""
     if not items:
-        return (f"{head}\nNothing has been filed on \"{keyword}\" in the last "
-                "hour. Want me to widen the search to today?")
-    lines = [head]
+        return (f'**Latest on "{keyword}"**\nNothing has been filed on '
+                f'"{keyword}" in the last 24 hours. Try a broader keyword.')
+    if widened:
+        lines = [f'**Latest on "{keyword}" — past 24 hours**',
+                 "Nothing new in the last hour, so these are today's most "
+                 "recent reports, newest first."]
+    else:
+        lines = [f'**Latest on "{keyword}" — past hour**']
     for it in items[:5]:
         src = it.get("publisher") or "source unknown"
-        age = _mins_ago(it.get("published_at", ""))
+        age = _age_label(it.get("published_at", ""))
         title = it["title"]
         if src and title.endswith(src):     # GN titles end with " - Publisher"
             title = title[: -len(src)].rstrip(" -–—")

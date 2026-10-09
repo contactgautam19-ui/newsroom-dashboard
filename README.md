@@ -1,4 +1,6 @@
-# Newsroom Intelligence Dashboard
+# Echo — newsroom intelligence dashboard
+
+Listens to social chatter, wire services and breaking news cycles.
 
 A light-theme, editor-first newsroom dashboard: a navy sidebar shell around three desks and five story views.
 

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#05080F">
+<title>Echo | Newsroom intelligence that hears the story first</title>
+<meta name="description" content="Echo listens to social chatter, wire services and breaking news cycles, ranks what matters in the last hour, and drafts the script. Built for TV news desks.">
+<meta property="og:title" content="Echo | Newsroom intelligence that hears the story first">
+<meta property="og:description" content="Listens to social chatter, wire services and breaking news cycles. Ranks the last hour. Drafts the script.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2305080F'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23E5383B'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23E5383B' stroke-opacity='.45' stroke-width='1.5'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;1,6..72,300;1,6..72,400&display=swap" rel="stylesheet">
+<style>
+  /* Design system. Three colours: ink base, bone text, one signal red.
+     Banned: gold, blue, purple, gradients on buttons, drop shadows. */
+  :root {
+    --abyss: #05080F; --deep: #0A101B; --panel: #0E1624;
+    --line: rgba(166, 190, 224, .13); --line-strong: rgba(166, 190, 224, .28);
+    --ink: #EEF1F6; --ink-2: #B3BFD0; --ink-3: #7F8DA3;
+    --signal: #E5383B; --signal-hi: #FF6B6B;
+    --f-display: "Newsreader", "Iowan Old Style", Georgia, serif;
+    --f-text: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --f-mono: "Geist Mono", ui-monospace, Menlo, Consolas, monospace;
+    --t-hero: clamp(3.1rem, 1rem + 8.2vw, 8.6rem);
+    --t-d1: clamp(2.4rem, 1rem + 4.6vw, 5.2rem);
+    --t-d2: clamp(1.9rem, 1.1rem + 2.6vw, 3.5rem);
+    --t-lead: clamp(1.08rem, .98rem + .45vw, 1.32rem);
+    --shell: 1240px; --gutter: clamp(1.25rem, 4.6vw, 4rem);
+    --section: clamp(5.5rem, 4.5rem + 8vh, 10rem);
+    --r-md: 18px; --ease: cubic-bezier(.23, 1, .32, 1);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body { background: var(--abyss); color: var(--ink); font-family: var(--f-text); font-size: 1.03rem; line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  a { color: inherit; text-decoration: none; }
+  img { display: block; max-width: 100%; }
+  .shell { width: min(var(--shell), 100% - 2 * var(--gutter)); margin-inline: auto; }
+  .mono { font-family: var(--f-mono); font-size: .75rem; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3); }
+  .mono b { color: var(--signal-hi); font-weight: 500; }
+  h1, h2, h3 { font-family: var(--f-display); font-weight: 300; letter-spacing: -.035em; line-height: .98; }
+  em { font-style: italic; color: var(--signal-hi); }
+  section { padding-block: var(--section); position: relative; }
+  .skip { position: absolute; left: -999px; } .skip:focus { left: 1rem; top: 1rem; z-index: 99; background: var(--ink); color: var(--abyss); padding: .5rem 1rem; border-radius: 8px; }
+
+  /* buttons: one primary action, pill shaped */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: .6rem; font-weight: 600; font-size: 1rem; padding: 1.05rem 1.9rem; border-radius: 999px; border: 1px solid var(--line-strong); transition: transform .35s var(--ease), background .25s, border-color .25s; cursor: pointer; white-space: nowrap; }
+  .btn:hover { transform: translateY(-2px); border-color: var(--ink-2); }
+  .btn--primary { background: var(--signal); border-color: var(--signal); color: #fff; }
+  .btn--primary:hover { background: var(--signal-hi); border-color: var(--signal-hi); }
+  .btn .arr { transition: transform .35s var(--ease); } .btn:hover .arr { transform: translateX(4px); }
+  :focus-visible { outline: 2px solid var(--signal-hi); outline-offset: 3px; }
+
+  /* nav */
+  .nav { position: fixed; inset: 0 0 auto 0; z-index: 20; height: 72px; display: flex; align-items: center; transition: background .3s, border-color .3s; border-bottom: 1px solid transparent; }
+  .nav.is-stuck { background: rgba(5, 8, 15, .82); backdrop-filter: blur(14px); border-color: var(--line); }
+  .nav .shell { display: flex; align-items: center; gap: 2rem; }
+  .brand { display: flex; align-items: center; gap: .65rem; font-family: var(--f-display); font-size: 1.55rem; letter-spacing: -.02em; }
+  .brand i { width: 11px; height: 11px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 0 5px rgba(229, 56, 59, .18); }
+  .nav__links { display: flex; gap: 1.8rem; margin-left: auto; font-size: .95rem; color: var(--ink-2); }
+  .nav__links a:hover { color: var(--ink); }
+  .nav .btn { padding: .65rem 1.25rem; font-size: .92rem; }
+  @media (max-width: 860px) { .nav__links { display: none; } .nav .btn { margin-left: auto; } }
+
+  /* hero */
+  .hero { min-height: 100svh; display: grid; align-items: center; padding-block: calc(72px + 3rem) 5rem; overflow: hidden; }
+  #echo-field { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+  .hero::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: linear-gradient(90deg, rgba(5, 8, 15, .92) 0%, rgba(5, 8, 15, .55) 44%, transparent 70%); }
+  .hero .shell { position: relative; z-index: 2; }
+  .hero h1 { font-size: var(--t-hero); line-height: .9; letter-spacing: -.045em; max-width: 11ch; }
+  .hero p.lead { font-size: var(--t-lead); color: var(--ink-2); max-width: 34rem; margin-top: 2rem; }
+  .hero__cta { display: flex; flex-wrap: wrap; gap: .9rem; margin-top: 2.4rem; }
+  .hero__strap { position: absolute; z-index: 2; left: 0; right: 0; bottom: 1.8rem; }
+  @media (max-width: 860px) {
+    .hero { align-items: end; padding-bottom: 6rem; }
+    .hero::before { background: linear-gradient(180deg, transparent 0%, rgba(5, 8, 15, .5) 38%, rgba(5, 8, 15, .94) 62%); }
+    .hero__cta .btn { width: 100%; }
+  }
+
+  /* problem */
+  .problem h2 { font-size: var(--t-d1); max-width: 14ch; }
+  .problem ul { list-style: none; padding: 0; margin-top: 3.5rem; display: grid; gap: 2rem; max-width: 46rem; }
+  .problem li { display: grid; grid-template-columns: 3.2rem 1fr; gap: 1.4rem; align-items: baseline; font-family: var(--f-display); font-size: clamp(1.35rem, 1rem + 1.3vw, 2.05rem); font-weight: 300; line-height: 1.15; letter-spacing: -.02em; color: var(--ink-2); }
+  .problem li::before { content: ""; height: 1px; background: var(--signal); transform: translateY(-.35em); }
+  .problem .turn { margin-top: 4rem; font-family: var(--f-display); font-size: var(--t-d2); font-weight: 300; letter-spacing: -.03em; }
+
+  /* what it hears: numbered list + one real screen */
+  .hears__head { display: grid; gap: 1.2rem; margin-bottom: 3.5rem; }
+  .hears__head h2 { font-size: var(--t-d1); max-width: 16ch; }
+  .hears__grid { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: clamp(1.5rem, 4vw, 4rem); align-items: start; }
+  .tabs { display: grid; border-top: 1px solid var(--line); }
+  .tab { all: unset; cursor: pointer; display: grid; grid-template-columns: 2.6rem 1fr; gap: .4rem 1rem; padding: 1.5rem 0; border-bottom: 1px solid var(--line); transition: opacity .3s; opacity: .5; }
+  .tab:hover { opacity: .8; } .tab[aria-selected="true"] { opacity: 1; }
+  .tab .n { font-family: var(--f-mono); font-size: .75rem; letter-spacing: .14em; color: var(--ink-3); padding-top: .55rem; }
+  .tab[aria-selected="true"] .n { color: var(--signal-hi); }
+  .tab h3 { font-size: clamp(1.5rem, 1.1rem + 1.2vw, 2.1rem); letter-spacing: -.025em; line-height: 1.05; }
+  .tab p { grid-column: 2; color: var(--ink-2); font-size: .98rem; max-width: 30rem; display: none; }
+  .tab[aria-selected="true"] p { display: block; }
+  .screen { position: sticky; top: 96px; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--panel); overflow: hidden; }
+  .screen__bar { display: flex; align-items: center; gap: .45rem; padding: .7rem .95rem; border-bottom: 1px solid var(--line); }
+  .screen__bar span { width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); }
+  .screen__bar em { margin-left: .6rem; font-family: var(--f-mono); font-style: normal; font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+  .screen__img { aspect-ratio: 16 / 10; position: relative; background: var(--abyss); }
+  .screen__img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top left; opacity: 0; transition: opacity .5s var(--ease); }
+  .screen__img img.is-on { opacity: 1; }
+  @media (max-width: 900px) { .hears__grid { grid-template-columns: 1fr; } .screen { position: static; order: -1; } }
+
+  /* how it works: one line that shows where a person decides */
+  .how h2 { font-size: var(--t-d1); max-width: 15ch; }
+  .flow { list-style: none; padding: 0; margin-top: 3.5rem; display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line-strong); }
+  .flow li { padding: 1.4rem 1.2rem 0 0; position: relative; }
+  .flow li::before { content: ""; position: absolute; top: -5px; left: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--ink-3); }
+  .flow li.person::before { background: var(--signal); box-shadow: 0 0 0 5px rgba(229, 56, 59, .2); }
+  .flow .mono { display: block; margin-bottom: .55rem; }
+  .flow strong { display: block; font-family: var(--f-display); font-weight: 300; font-size: 1.45rem; letter-spacing: -.02em; line-height: 1.1; }
+  .flow p { color: var(--ink-3); font-size: .92rem; margin-top: .5rem; max-width: 15rem; }
+  @media (max-width: 900px) { .flow { grid-template-columns: 1fr; border-top: 0; border-left: 1px solid var(--line-strong); } .flow li { padding: 0 0 2rem 1.6rem; } .flow li::before { top: .45rem; left: -5px; } }
+
+  /* proof: only numbers that are true of the product */
+  .proof { border-block: 1px solid var(--line); background: var(--deep); padding-block: clamp(3.5rem, 6vw, 5.5rem); }
+  .proof dl { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2rem; }
+  .proof dt { font-family: var(--f-display); font-weight: 300; font-size: clamp(2.8rem, 1.6rem + 4vw, 5rem); letter-spacing: -.04em; line-height: 1; }
+  .proof dd { color: var(--ink-3); font-size: .95rem; margin-top: .6rem; max-width: 14rem; }
+  @media (max-width: 760px) { .proof dl { grid-template-columns: repeat(2, 1fr); } }
+
+  /* trust */
+  .trust__grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: clamp(2rem, 6vw, 6rem); align-items: start; }
+  .trust h2 { font-size: var(--t-d1); }
+  .trust ol { list-style: none; padding: 0; display: grid; }
+  .trust li { padding: 1.6rem 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: 2.6rem 1fr; gap: 1rem; }
+  .trust li:last-child { border-bottom: 1px solid var(--line); }
+  .trust li strong { display: block; font-weight: 500; font-size: 1.1rem; margin-bottom: .25rem; }
+  .trust li span.b { color: var(--ink-2); }
+  @media (max-width: 900px) { .trust__grid { grid-template-columns: 1fr; } }
+
+  /* close */
+  .close { text-align: center; padding-block: clamp(7rem, 16vh, 12rem); }
+  .close h2 { font-size: var(--t-hero); line-height: .92; letter-spacing: -.045em; }
+  .close p { color: var(--ink-2); font-size: var(--t-lead); margin: 1.6rem auto 2.4rem; max-width: 30rem; }
+  footer { border-top: 1px solid var(--line); padding-block: 2rem; color: var(--ink-3); font-size: .9rem; }
+  footer .shell { display: flex; flex-wrap: wrap; gap: 1rem 2rem; align-items: center; }
+  footer a:hover { color: var(--ink); } footer .sp { margin-left: auto; }
+
+  /* motion: gentle reveals only, and none at all when the reader asks for less */
+  .rv { opacity: 0; transform: translateY(18px); transition: opacity .9s var(--ease), transform .9s var(--ease); }
+  .rv.is-in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .rv { opacity: 1; transform: none; transition: none; }
+    .btn, .btn .arr, .screen__img img { transition: none; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav" id="nav">
+  <div class="shell">
+    <a class="brand" href="#top" aria-label="Echo home"><i></i>Echo</a>
+    <nav class="nav__links" aria-label="Primary">
+      <a href="#hears">What it hears</a>
+      <a href="#how">How it works</a>
+      <a href="#trust">Your desk</a>
+      <a href="/login">Editor login</a>
+    </nav>
+    <a class="btn btn--primary" href="/guest?src=landing">Get demo access</a>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top">
+    <canvas id="echo-field" aria-hidden="true"></canvas>
+    <div class="shell">
+      <h1>Hear the story before it <em>breaks.</em></h1>
+      <p class="lead">Echo listens to social chatter, wire services and breaking news cycles, then tells your desk what matters in the last hour.</p>
+      <div class="hero__cta">
+        <a class="btn btn--primary" href="/guest?src=landing">Get demo access <span class="arr" aria-hidden="true">→</span></a>
+        <a class="btn" href="#hears">See what it hears</a>
+      </div>
+    </div>
+    <div class="hero__strap"><div class="shell mono"><b>Echo</b>&nbsp;&nbsp;Newsroom intelligence for TV desks</div></div>
+  </section>
+
+  <section class="problem">
+    <div class="shell">
+      <h2 class="rv">Most desks hear it <em>late.</em></h2>
+      <ul>
+        <li class="rv">Forty tabs open. None of them ranked.</li>
+        <li class="rv">A rival is on air before your alert lands.</li>
+        <li class="rv">A fresh article is not always a fresh story.</li>
+      </ul>
+      <p class="turn rv">Echo listens to all of it, at once.</p>
+    </div>
+  </section>
+
+  <section class="hears" id="hears">
+    <div class="shell">
+      <div class="hears__head">
+        <p class="mono rv"><b>01</b>&nbsp;&nbsp;What it hears</p>
+        <h2 class="rv">Four desks. One screen.</h2>
+      </div>
+      <div class="hears__grid">
+        <div class="tabs" role="tablist" aria-label="Echo screens">
+          <button class="tab" role="tab" aria-selected="true" data-shot="signals" data-label="News Signals">
+            <span class="n">01</span><h3>News Signals</h3>
+            <p>Every story from the last hour, scored out of 100, with the reason for each point. Breaking now is kept apart from new articles on older stories.</p>
+          </button>
+          <button class="tab" role="tab" aria-selected="false" data-shot="onair" data-label="On air">
+            <span class="n">02</span><h3>On air, by the hour</h3>
+            <p>What six rival channels are running right now, read off their live broadcast, with the stories you have not picked up yet.</p>
+          </button>
+          <button class="tab" role="tab" aria-selected="false" data-shot="social" data-label="Social Monitor">
+            <span class="n">03</span><h3>Social Monitor</h3>
+            <p>What India is searching on Google, watching on YouTube and posting on X, side by side. One click sends a topic to the script desk.</p>
+          </button>
+          <button class="tab" role="tab" aria-selected="false" data-shot="npro" data-label="N-Pro">
+            <span class="n">04</span><h3>N-Pro script desk</h3>
+            <p>Pick a story and get an AV read, a package, an explainer or a debate rundown, drafted only from dated, sourced reporting.</p>
+          </button>
+        </div>
+        <figure class="screen rv" aria-live="polite">
+          <div class="screen__bar"><span></span><span></span><span></span><em id="screen-label">News Signals</em></div>
+          <div class="screen__img">
+            <img class="is-on" data-shot="signals" src="/static/landing/echo-news-signals.webp" alt="Echo News Signals board: ranked stories from the last hour with scores and reasons" width="1280" height="800">
+            <img data-shot="onair" src="/static/landing/echo-on-air.webp" alt="Echo on-air panel: what rival news channels are broadcasting this hour" width="1280" height="800" loading="lazy">
+            <img data-shot="social" src="/static/landing/echo-social-monitor.webp" alt="Echo Social Monitor: trending topics on Google, YouTube and X side by side" width="1280" height="800" loading="lazy">
+            <img data-shot="npro" src="/static/landing/echo-n-pro.webp" alt="Echo N-Pro script desk answering a newsroom question with dated sources" width="1280" height="800" loading="lazy">
+          </div>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="how" id="how">
+    <div class="shell">
+      <p class="mono rv" style="margin-bottom:1.2rem"><b>02</b>&nbsp;&nbsp;How it works</p>
+      <h2 class="rv">From first signal to script, with an editor in the middle.</h2>
+      <ol class="flow">
+        <li class="rv"><span class="mono">Listen</span><strong>Signal heard</strong><p>Wires, 50 news sources, X handles and live TV, checked on a loop.</p></li>
+        <li class="rv"><span class="mono">Rank</span><strong>Scored with evidence</strong><p>Each point on the score names what earned it.</p></li>
+        <li class="rv"><span class="mono">Flag</span><strong>Alert to the desk</strong><p>Breaking stories flash on every screen, not only one tab.</p></li>
+        <li class="rv person"><span class="mono"><b>A person decides</b></span><strong>Editor picks</strong><p>Echo recommends. Your editor chooses what leads.</p></li>
+        <li class="rv"><span class="mono">Produce</span><strong>Script drafted</strong><p>Labelled as a draft, ready for review.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="proof" aria-label="Echo in numbers">
+    <div class="shell">
+      <dl>
+        <div class="rv"><dt>50</dt><dd>news sources and wire services read every cycle</dd></div>
+        <div class="rv"><dt>242</dt><dd>official, rival and reporter handles watched on X</dd></div>
+        <div class="rv"><dt>6</dt><dd>rival channels monitored live, hour by hour</dd></div>
+        <div class="rv"><dt>60<span style="font-size:.45em;letter-spacing:0"> min</span></dt><dd>the board only shows what was published in the last hour</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="trust" id="trust">
+    <div class="shell trust__grid">
+      <div>
+        <p class="mono rv" style="margin-bottom:1.2rem"><b>03</b>&nbsp;&nbsp;Your desk</p>
+        <h2 class="rv">It advises. Your desk <em>decides.</em></h2>
+      </div>
+      <ol>
+        <li class="rv"><span class="mono">01</span><span><strong>Every score shows its working.</strong><span class="b">Open any story and see which words, sources and signals earned each point.</span></span></li>
+        <li class="rv"><span class="mono">02</span><span><strong>Single-source stories are flagged.</strong><span class="b">Nothing is called breaking until a second outlet carries it.</span></span></li>
+        <li class="rv"><span class="mono">03</span><span><strong>Nothing publishes itself.</strong><span class="b">Scripts are marked as AI drafts and wait for an editor.</span></span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="close">
+    <div class="shell">
+      <h2 class="rv">Put Echo on your <em>desk.</em></h2>
+      <p class="rv">A 15-minute live demo on today's news. Enter your work email and you are in.</p>
+      <a class="btn btn--primary rv" href="/guest?src=landing">Get demo access <span class="arr" aria-hidden="true">→</span></a>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="shell">
+    <a class="brand" href="#top" style="font-size:1.2rem"><i></i>Echo</a>
+    <span>Listens to social chatter, wire services and breaking news cycles.</span>
+    <a class="sp" href="mailto:contactgautam19@gmail.com?subject=Echo%20demo">contactgautam19@gmail.com</a>
+    <a href="/login">Editor login</a>
+  </div>
+</footer>
+
+<script>
+// Nav background once the hero is left behind.
+const nav = document.getElementById('nav');
+addEventListener('scroll', () => nav.classList.toggle('is-stuck', scrollY > 40), { passive: true });
+
+// Gentle reveal as sections arrive. Content is never hidden without JS help:
+// if the observer is missing, everything is shown at once.
+const rv = document.querySelectorAll('.rv');
+if ('IntersectionObserver' in window) {
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); }
+  }), { rootMargin: '0px 0px -8% 0px' });
+  rv.forEach((el, i) => { el.style.transitionDelay = (i % 4) * 70 + 'ms'; io.observe(el); });
+} else rv.forEach(el => el.classList.add('is-in'));
+
+// Screen switcher: four tabs, one real screenshot each.
+const tabs = [...document.querySelectorAll('.tab')];
+const shots = [...document.querySelectorAll('.screen__img img')];
+function pick(tab) {
+  tabs.forEach(t => t.setAttribute('aria-selected', t === tab));
+  shots.forEach(s => s.classList.toggle('is-on', s.dataset.shot === tab.dataset.shot));
+  document.getElementById('screen-label').textContent = tab.dataset.label;
+}
+tabs.forEach(t => t.addEventListener('click', () => pick(t)));
+
+// Hero: echo rings. Dotted ellipses travel outward from one red source, like a
+// sonar sweep over a tilted plane, with the feeds Echo listens to pinging on
+// them. Drawn on a 2D canvas, paused off screen, still frame for reduced motion.
+(() => {
+  const c = document.getElementById('echo-field');
+  const x = c.getContext('2d');
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const FEEDS = ['X', 'WIRE', 'ON AIR', 'SEARCH', 'YOUTUBE'];
+  let w, h, dpr, cx, cy, R, stars = [], running = true;
+
+  function size() {
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    w = c.clientWidth; h = c.clientHeight;
+    c.width = w * dpr; c.height = h * dpr;
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const narrow = w < 860;
+    cx = narrow ? w * .5 : w * .7;
+    cy = narrow ? h * .27 : h * .5;
+    R = Math.max(w, h) * (narrow ? .62 : .5);
+    stars = Array.from({ length: Math.round(w * h / 9000) }, () =>
+      ({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.1 + .2, a: Math.random() * .5 + .08 }));
+  }
+
+  function frame(t) {
+    x.clearRect(0, 0, w, h);
+    for (const s of stars) { x.fillStyle = `rgba(190,206,230,${s.a})`; x.beginPath(); x.arc(s.x, s.y, s.r, 0, 6.283); x.fill(); }
+    const T = t / 1000, RINGS = 9, TILT = .42;
+    for (let i = 0; i < RINGS; i++) {
+      const p = ((i / RINGS) + T * .045) % 1;          // 0 at the source, 1 at the edge
+      const rad = 26 + p * R;
+      const alpha = Math.sin(p * Math.PI) * .75;       // fade in, fade out
+      const dots = Math.round(40 + rad * .42);
+      for (let d = 0; d < dots; d++) {
+        const a = (d / dots) * 6.283 + i * .7 + T * .03;
+        const px = cx + Math.cos(a) * rad, py = cy + Math.sin(a) * rad * TILT;
+        const near = (Math.sin(a) + 1) / 2;            // nearer dots are brighter
+        x.fillStyle = `rgba(190,206,230,${alpha * (.26 + near * .62)})`;
+        x.beginPath(); x.arc(px, py, .7 + near * .9, 0, 6.283); x.fill();
+      }
+      // one feed pings on every other ring
+      if (i % 2 === 0 && p > .14) {
+        const a = i * 1.9 + .6;
+        const px = cx + Math.cos(a) * rad, py = cy + Math.sin(a) * rad * TILT;
+        x.fillStyle = `rgba(255,107,107,${alpha})`;
+        x.beginPath(); x.arc(px, py, 3, 0, 6.283); x.fill();
+        x.strokeStyle = `rgba(255,107,107,${alpha * .45})`;
+        x.beginPath(); x.arc(px, py, 7 + ((T * 12 + i * 5) % 9), 0, 6.283); x.stroke();
+        x.font = '500 10.5px "Geist Mono", ui-monospace, monospace';
+        x.fillStyle = `rgba(179,191,208,${alpha * .9})`;
+        x.fillText(FEEDS[(i / 2) % FEEDS.length | 0], px + 14, py + 3.5);
+      }
+    }
+    // the source
+    const pulse = still ? .5 : (Math.sin(T * 2.2) + 1) / 2;
+    x.fillStyle = 'rgba(229,56,59,.16)'; x.beginPath(); x.arc(cx, cy, 20 + pulse * 10, 0, 6.283); x.fill();
+    x.fillStyle = '#E5383B'; x.beginPath(); x.arc(cx, cy, 6.5, 0, 6.283); x.fill();
+    if (running && !still) requestAnimationFrame(frame);
+  }
+
+  size();
+  addEventListener('resize', () => { size(); if (still) frame(9000); });
+  if (still) { frame(9000); return; }
+  new IntersectionObserver(([e]) => {
+    const was = running; running = e.isIntersecting;
+    if (running && !was) requestAnimationFrame(frame);
+  }).observe(c);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

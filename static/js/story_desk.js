@@ -6,9 +6,9 @@ const StoryDesk = (() => {
   let sortBy = 'score';
 
   const STATUS = {
-    breaking:   { label: 'Breaking',   bar: '#D92D20', bg: 'bg-red1',   text: 'text-red8',   circleBg: '#FEF3F2', circleText: '#B42318' },
-    developing: { label: 'Developing', bar: '#F79009', bg: 'bg-amber1', text: 'text-amber8', circleBg: '#FFFAEB', circleText: '#B54708' },
-    verified:   { label: 'Verified',   bar: '#079455', bg: 'bg-green1', text: 'text-green8', circleBg: '#ECFDF3', circleText: '#085D3A' },
+    breaking:   { label: 'Breaking',   bar: '#EC4A4D', bg: 'bg-red1',   text: 'text-red8',   circleBg: '#2A1216', circleText: '#FF8A8A' },
+    developing: { label: 'Developing', bar: '#F79009', bg: 'bg-amber1', text: 'text-amber8', circleBg: '#2A2010', circleText: '#F6C777' },
+    verified:   { label: 'Verified',   bar: '#34C38A', bg: 'bg-green1', text: 'text-green8', circleBg: '#0F2A20', circleText: '#7BE0B4' },
   };
 
   const CHIP_COLORS = {
@@ -29,6 +29,7 @@ const StoryDesk = (() => {
     visual:    () => 'Strong visuals available',
     novelty:   () => 'Unusual, unexpected angle',
     trend:     () => 'Trending on X right now',
+    india_priority: () => 'Carried by an Indian outlet',
     audience:  b => (b.evidence[0] || '').includes('airing')
                     ? 'Indian channels airing this' : 'Clear India angle',
   };
@@ -48,6 +49,27 @@ const StoryDesk = (() => {
     return parts.join('  ·  ');
   }
 
+  // Event phase (set server-side): is the EVENT happening now, or is this a
+  // freshly published article about something that broke earlier?
+  const PHASE = {
+    breaking_now: { chip: '● Happening now', cls: 'bg-red6 text-white' },
+    just_in:      { chip: 'Just in', cls: 'bg-blue1 text-blue8' },
+    followup:     { chip: 'Older story · new article', cls: 'bg-paper text-sub border border-line' },
+  };
+  const isLive = s => s.event_phase !== 'followup';
+
+  function phaseChip(s) {
+    const ph = PHASE[s.event_phase];
+    if (!ph) return '';
+    let tip = s.event_note || '';
+    let text = ph.chip;
+    if (s.event_phase === 'followup' && s.event_started_at) {
+      text = `Story broke ${ageLabel(s.event_started_at)} · new article`;
+      tip = `First reported ${ageLabel(s.event_started_at)}; this article is newly published`;
+    }
+    return `<span class="px-2.5 py-0.5 rounded-md font-semibold ${ph.cls}" title="${esc(tip)}">${esc(text)}</span>`;
+  }
+
   function card(s) {
     const st = STATUS[s.status] || STATUS.developing;
     const mins = Math.round((Date.now() - new Date(s.published_at).getTime()) / 60000);
@@ -62,11 +84,12 @@ const StoryDesk = (() => {
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2 flex-wrap mb-1.5 text-[12px]">
           <span class="sm:hidden font-bold text-[14px]" style="color:${st.circleText}">${s.score}</span>
+          ${phaseChip(s)}
           <span class="px-2.5 py-0.5 rounded-md font-semibold ${st.bg} ${st.text}">${st.label}</span>
           ${s.needs_review ? '<span class="px-2.5 py-0.5 rounded-md font-semibold bg-amber1 text-amber8">Needs Review</span>' : ''}
           ${s.high_demand ? '<span class="px-2.5 py-0.5 rounded-md font-semibold bg-red1 text-red8">High Demand</span>' : ''}
           ${Array.isArray(s.rival_coverage) && s.rival_coverage.length ? `<span class="px-2.5 py-0.5 rounded-md font-semibold bg-red1 text-red8">📺 On air: ${esc(s.rival_coverage.join(', '))}</span>` : ''}
-          <span class="font-medium ${ageColor}">${ageLabel(s.published_at)}</span>
+          <span class="font-medium ${ageColor}" title="When this article was published">published ${ageLabel(s.published_at)}</span>
         </div>
         <h3 class="text-[16.5px] font-bold leading-snug mb-1">
           ${s.url ? `<a href="${esc(s.url)}" target="_blank" class="hover:underline">${esc(s.title)}</a>` : esc(s.title)}
@@ -74,7 +97,7 @@ const StoryDesk = (() => {
         <p class="text-[13px] text-sub flex items-center gap-1.5 flex-wrap">
           <span>${esc(s.publisher || '')}</span>
           <span>·</span><span>${esc(s.category)}</span>
-          ${corroborated ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="#2563EB"><path d="M12 2l2.4 2.4 3.4-.5 1 3.3 3.2 1.4-1.4 3.1 1.7 3-2.9 1.9-.2 3.5-3.4.3-1.9 2.9-3.1-1.5-3.1 1.5-1.9-2.9-3.4-.3-.2-3.5L2.3 14l1.7-3-1.4-3.1 3.2-1.4 1-3.3 3.4.5z"/><path d="M9 12.5l2 2 4-4.5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>' : ''}
+          ${corroborated ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="#8FB4E8"><path d="M12 2l2.4 2.4 3.4-.5 1 3.3 3.2 1.4-1.4 3.1 1.7 3-2.9 1.9-.2 3.5-3.4.3-1.9 2.9-3.1-1.5-3.1 1.5-1.9-2.9-3.4-.3-.2-3.5L2.3 14l1.7-3-1.4-3.1 3.2-1.4 1-3.3 3.4.5z"/><path d="M9 12.5l2 2 4-4.5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/></svg>' : ''}
           ${corroborated ? `<span class="text-green6 font-medium">+${s.sources.length - 1} more</span>` : ''}
           ${s.trend_boost > 0 ? '<span class="text-blue6 font-medium">↗ trending on X</span>' : ''}
         </p>
@@ -90,7 +113,7 @@ const StoryDesk = (() => {
     </article>`;
   }
 
-  const MIX_COLORS = ['#2563EB', '#079455', '#F79009', '#D92D20', '#7A5AF8', '#0E9384', '#DD2590', '#667085'];
+  const MIX_COLORS = ['#8FB4E8', '#34C38A', '#F79009', '#EC4A4D', '#A99BFF', '#4CC9B8', '#F27DB8', '#8C9AB0'];
 
   function renderMix(view) {
     const el = document.getElementById('board-mix');
@@ -114,8 +137,8 @@ const StoryDesk = (() => {
 
     el.innerHTML = `
       <svg width="88" height="88" viewBox="0 0 88 88" class="shrink-0">${segs}
-        <text x="44" y="42" text-anchor="middle" font-size="20" font-weight="700" fill="#101828">${total}</text>
-        <text x="44" y="56" text-anchor="middle" font-size="8.5" fill="#667085">Total Stories</text>
+        <text x="44" y="42" text-anchor="middle" font-size="20" font-weight="700" fill="#EEF1F6">${total}</text>
+        <text x="44" y="56" text-anchor="middle" font-size="8.5" fill="#8C9AB0">Total Stories</text>
       </svg>
       <div class="flex-1 space-y-1.5 min-w-0">
         ${entries.map(([cat, n], i) => `
@@ -134,9 +157,12 @@ const StoryDesk = (() => {
     const breaking = active.filter(s => s.status === 'breaking').length;
     const review = active.filter(s => s.needs_review).length;
     const trending = active.filter(s => s.trend_boost > 0).length;
+    const live = active.filter(isLive).length;
     let msg;
+    if (!active.length) { el.textContent = 'No stories in the last hour yet — the board refills on the next refresh.'; return; }
     if (breaking) msg = `${breaking} breaking ${breaking === 1 ? 'story' : 'stories'} on the board right now.`;
-    else msg = 'High volume of developing stories right now.';
+    else if (live === active.length) msg = `All ${live} stories on the board broke within the last hour.`;
+    else msg = `${live} of ${active.length} stories broke within the last hour; the other ${active.length - live} ${active.length - live === 1 ? 'is a new article on an older story' : 'are new articles on older stories'}.`;
     if (review) msg += ` ${review} need${review === 1 ? 's' : ''} immediate editorial attention.`;
     else if (trending) msg += ` ${trending} ${trending === 1 ? 'is' : 'are'} trending on X.`;
     el.textContent = msg;
@@ -146,13 +172,13 @@ const StoryDesk = (() => {
     const active = stories.filter(s => !s.picked);
     const cats = [...new Set(active.map(s => s.category))].sort();
     const pickedCount = stories.filter(s => s.picked).length;
-    const chips = ['All', 'Breaking', 'Developing', ...cats];
+    const chips = ['All', 'Happening now', 'Older stories', 'Breaking', 'Developing', ...cats];
     if (pickedCount) chips.push(`Picked (${pickedCount})`);
     document.getElementById('filters').innerHTML = chips.map(c => {
       const key = c.startsWith('Picked') ? 'Picked' : c;
       const activeChip = key === filter;
       const color = CHIP_COLORS[key] || 'text-sub border-line';
-      return `<button onclick="StoryDesk.setFilter('${esc(key)}')" class="px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold border bg-white ${activeChip ? 'bg-navy text-white border-navy' : color + ' hover:border-ink'}" ${activeChip ? 'style="background:#0B1526;color:#fff;border-color:#0B1526"' : ''}>${esc(c)}</button>`;
+      return `<button onclick="StoryDesk.setFilter('${esc(key)}')" class="px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold border bg-white ${activeChip ? 'bg-navy text-white border-navy' : color + ' hover:border-ink'}" ${activeChip ? 'style="background:#EEF1F6 !important;color:#05080F !important;border-color:#EEF1F6"' : ''}>${esc(c)}</button>`;
     }).join('');
   }
 
@@ -166,6 +192,8 @@ const StoryDesk = (() => {
       view = active;
       if (filter === 'Breaking') view = view.filter(s => s.status === 'breaking');
       else if (filter === 'Developing') view = view.filter(s => s.status === 'developing');
+      else if (filter === 'Happening now') view = view.filter(isLive);
+      else if (filter === 'Older stories') view = view.filter(s => !isLive(s));
       else if (filter !== 'All') view = view.filter(s => s.category === filter);
     }
     if (sortBy === 'newest') view = [...view].sort((a, b) => (b.published_at || '').localeCompare(a.published_at || ''));
@@ -174,9 +202,24 @@ const StoryDesk = (() => {
     const countEl = document.getElementById('story-count');
     if (countEl) countEl.textContent = view.length;
     const el = document.getElementById('story-list');
-    el.innerHTML = view.length
+    if (!view.length) {
+      el.innerHTML = '<p class="text-sub text-[14px] py-8 text-center">No stories match this filter yet.</p>';
+      return;
+    }
+    // Two bands, so a fresh article on yesterday's story is never mistaken for
+    // something breaking: events that surfaced this hour first, then the rest.
+    const live = view.filter(isLive);
+    const older = view.filter(s => !isLive(s));
+    const band = (title, note, list, dot) => list.length ? `
+      <div class="flex items-baseline gap-2 pt-1">
+        <span class="w-2 h-2 rounded-full self-center" style="background:${dot}"></span>
+        <p class="text-[11.5px] uppercase tracking-widest text-ink">${title}</p>
+        <span class="text-[12px] text-sub">${list.length} · ${note}</span>
+      </div>${list.map(s => card(s)).join('')}` : '';
+    el.innerHTML = filter === 'Picked'
       ? view.map(s => card(s)).join('')
-      : '<p class="text-sub text-[14px] py-8 text-center">No stories match this filter yet.</p>';
+      : band('Breaking in the last hour', 'the event itself is new', live, '#EC4A4D')
+        + band('Just published · older stories', 'new articles on stories that broke earlier', older, '#5E6B80');
   }
 
   function setFilter(f) { filter = f; render(); }
@@ -286,9 +329,9 @@ const StoryDesk = (() => {
           const pct = b.max_points ? Math.round(b.points / b.max_points * 100) : 0;
           return `
           <div class="flex items-center gap-2 text-[12.5px]">
-            <span class="w-20 shrink-0 capitalize ${b.points > 0 ? 'font-medium' : 'text-sub'}">${esc(b.variable)}</span>
+            <span class="w-24 shrink-0 capitalize ${b.points > 0 ? 'font-medium' : 'text-sub'}">${esc(String(b.variable).replace(/_/g, ' '))}</span>
             <div class="flex-1 h-2.5 rounded-full bg-paper overflow-hidden">
-              <div class="h-full rounded-full" style="width:${pct}%;background:${b.points > 0 ? '#2563EB' : '#E4E7EC'}"></div>
+              <div class="h-full rounded-full" style="width:${pct}%;background:${b.points > 0 ? '#8FB4E8' : '#1B2636'}"></div>
             </div>
             <span class="w-11 shrink-0 text-right font-mono ${b.points > 0 ? 'text-blue6' : 'text-sub'}">${b.points}/${b.max_points}</span>
           </div>`;

@@ -1,4 +1,4 @@
-"""Newsroom Intelligence Dashboard — FastAPI app.
+"""Echo — newsroom intelligence dashboard — FastAPI app.
 
 Endpoints:
   GET  /                     dashboard UI
@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
-app = FastAPI(title="Newsroom Intelligence Dashboard", lifespan=lifespan)
+app = FastAPI(title="Echo", lifespan=lifespan)
 
 
 # --------------------------------------------------------------------------
@@ -74,11 +74,38 @@ def _passcode_hash() -> str:
 
 # paths reachable without the cookie: the login flow, static assets, and the
 # cron endpoints (which carry their own secret)
-_AUTH_EXEMPT_PREFIXES = ("/login", "/api/login", "/static/", "/api/cron/", "/guest", "/api/guest/")
-# guests are read-only: GET only, except the two POSTs below (the board refresh
-# costs nothing and keeps the demo fresh; guest endpoints are their own flow)
-_GUEST_POST_ALLOW = ("/api/guest/", "/api/ingest")
+_AUTH_EXEMPT_PREFIXES = ("/login", "/api/login", "/static/", "/api/cron/", "/guest",
+                         "/api/guest/", "/landing")
+# guests get a demo, not the keys: GET everywhere except the blocked paths, plus
+# the POSTs below. Free actions (board refresh, alert scan, keyless on-air poll)
+# are open; the paid ones are metered per guest — see guest.QUOTAS.
+_GUEST_POST_ALLOW = ("/api/guest/", "/api/ingest", "/api/alerts/scan",
+                     "/api/live-coverage/refresh", "/api/x/refresh", "/api/npro/",
+                     "/api/hyper/scan")
 _GUEST_BLOCK = ("/api/settings", "/api/sim/", "/api/guests")
+# metered guest POSTs: path prefix -> quota kind. Context and the intelligence
+# panel fire automatically alongside these, so they are not counted twice.
+_GUEST_METERED = (("/api/x/refresh", "x"), ("/api/npro/open", "ai"),
+                  ("/api/npro/chat", "ai"), ("/api/npro/retrieve", "ai"),
+                  ("/api/npro/generate", "ai"), ("/api/npro/action", "ai"))
+_WRITE_RE = re.compile(r"^/api/stories/[0-9]+/write$")
+
+
+def _guest_quota_block(path: str, email: str):
+    """Spend the guest's quota for a metered path; a response when it is gone.
+    The body carries every field the calling screens read, so each one shows
+    the limit message instead of breaking."""
+    kind = next((k for p, k in _GUEST_METERED if path.startswith(p)), None)
+    if kind is None and _WRITE_RE.match(path):
+        kind = "ai"
+    if kind is None:
+        return None
+    message = guest.consume(email, kind)
+    if message is None:
+        return None
+    return JSONResponse({"ok": False, "limit_reached": True, "error": message,
+                         "answer": message, "summary": message, "result": message,
+                         "retrieved": [], **guest.remaining(email)}, status_code=429)
 
 
 @app.middleware("http")
@@ -92,31 +119,50 @@ async def passcode_gate(request: Request, call_next):
         return await call_next(request)
     g = guest.parse_token(request.cookies.get(guest.COOKIE))
     if g:
+        allowed_post = (any(path.startswith(p) for p in _GUEST_POST_ALLOW)
+                        or _WRITE_RE.match(path))
         if (any(path.startswith(p) for p in _GUEST_BLOCK)
-                or (request.method != "GET" and not any(path.startswith(p) for p in _GUEST_POST_ALLOW))):
+                or (request.method != "GET" and not allowed_post)):
             return JSONResponse({"error": "read-only guest"}, status_code=403)
+        if request.method == "POST":
+            blocked = _guest_quota_block(path, g["email"])
+            if blocked is not None:
+                return blocked
         request.state.guest = g
         return await call_next(request)
-    # unauthenticated: JSON 401 for API calls, redirect to /login for browsers
+    # unauthenticated: JSON 401 for API calls; a stranger at the front door
+    # gets the public landing page; any other page goes to /login
     if path.startswith("/api/"):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if path == "/":
+        return landing_page()
     return RedirectResponse("/login", status_code=302)
 
 
 _LOGIN_HTML = """<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Newsroom</title></head>
-<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0B1526;font-family:-apple-system,Segoe UI,Arial,sans-serif;">
-<div style="background:#fff;border-radius:12px;padding:36px 40px;width:320px;box-shadow:0 12px 40px rgba(0,0,0,.4);text-align:center;">
-  <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:20px;">
-    <span style="width:12px;height:12px;border-radius:50%;background:#E02424;display:inline-block;"></span>
-    <span style="font-size:20px;font-weight:700;color:#0B1526;">Newsroom</span>
-  </div>
-  <input id="pc" type="password" placeholder="Passcode" autofocus
-    style="width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #cfd8e3;border-radius:8px;font-size:15px;margin-bottom:12px;">
-  <button id="go" style="width:100%;padding:11px;border:0;border-radius:8px;background:#E02424;color:#fff;font-size:15px;font-weight:600;cursor:pointer;">Enter newsroom</button>
-  <div id="err" style="color:#E02424;font-size:13px;margin-top:12px;height:16px;"></div>
-  <a href="/guest" style="display:block;margin-top:14px;font-size:13px;color:#4B5563;text-decoration:none;">Visiting from the portfolio? <span style="color:#0B1526;font-weight:600;">Get read-only guest access →</span></a>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#05080F"><title>Echo | Editor login</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#05080F;color:#EEF1F6;font-family:Geist,-apple-system,Segoe UI,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .card{background:#0E1624;border:1px solid #1B2636;border-radius:18px;padding:38px 36px;width:340px;max-width:calc(100vw - 32px);box-sizing:border-box;text-align:center}
+  .brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;font-family:Newsreader,Georgia,serif;font-size:30px;letter-spacing:-.02em;color:inherit;text-decoration:none}
+  .brand i{width:11px;height:11px;border-radius:50%;background:#E5383B;box-shadow:0 0 0 5px rgba(229,56,59,.18)}
+  .sub{font-size:13px;line-height:1.5;color:#8C9AB0;margin:0 0 24px}
+  input{width:100%;box-sizing:border-box;padding:13px 16px;border:1px solid #2A384D;border-radius:999px;font:inherit;font-size:15px;background:#0A101B;color:#EEF1F6;margin-bottom:12px;text-align:center}
+  input:focus{outline:2px solid #FF6B6B;outline-offset:2px}
+  button{width:100%;padding:13px;border:0;border-radius:999px;background:#E5383B;color:#fff;font:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s}
+  button:hover{background:#FF6B6B}
+  .err{color:#FF8A8A;font-size:13px;margin-top:12px;height:16px}
+  .alt{display:block;margin-top:16px;font-size:13px;color:#8C9AB0;text-decoration:none}.alt b{color:#EEF1F6;font-weight:600}
+</style></head>
+<body>
+<div class="card">
+  <a class="brand" href="/"><i></i>Echo</a>
+  <p class="sub">Listens to social chatter, wire services and breaking news cycles.</p>
+  <input id="pc" type="password" placeholder="Passcode" autofocus aria-label="Passcode">
+  <button id="go">Enter Echo</button>
+  <div id="err" class="err"></div>
+  <a class="alt" href="/guest">Here for a demo? <b>Get guest access →</b></a>
 </div>
 <script>
 const inp=document.getElementById('pc'),err=document.getElementById('err');
@@ -133,6 +179,13 @@ inp.addEventListener('keydown',e=>{if(e.key==='Enter')submit();});
 </body></html>"""
 
 
+@app.get("/landing", response_class=HTMLResponse)
+def landing_page():
+    """Public marketing page. Also what an unauthenticated visitor sees at /."""
+    html = (config.STATIC_DIR / "landing.html").read_text(encoding="utf-8")
+    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=300"})
+
+
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
     return _LOGIN_HTML
@@ -140,37 +193,39 @@ def login_page():
 
 _GUEST_HTML = """<!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Newsroom — guest access</title>
+<meta name="theme-color" content="#05080F"><title>Echo | Demo access</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400&display=swap" rel="stylesheet">
 <style>
-  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0B1526;font-family:-apple-system,Segoe UI,Arial,sans-serif;color:#0B1526}
-  .card{background:#fff;border-radius:14px;padding:34px 36px;width:380px;max-width:calc(100vw - 32px);box-sizing:border-box;box-shadow:0 12px 40px rgba(0,0,0,.4)}
-  .brand{display:flex;align-items:center;gap:8px;margin-bottom:6px}.brand i{width:12px;height:12px;border-radius:50%;background:#E02424;display:inline-block}
-  .brand b{font-size:20px}.sub{font-size:13px;color:#6B7280;margin:0 0 18px}
-  label{display:block;font-size:12px;color:#6B7280;margin:10px 0 4px}
-  input{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid #cfd8e3;border-radius:8px;font-size:15px}
-  input:focus{outline:2px solid #2563EB;border-color:transparent}
-  button{width:100%;margin-top:16px;padding:12px;border:0;border-radius:8px;background:#E02424;color:#fff;font-size:15px;font-weight:600;cursor:pointer}
-  button[disabled]{opacity:.6;cursor:wait}
-  .err{color:#E02424;font-size:13px;margin-top:10px;min-height:16px}.note{font-size:12.5px;color:#6B7280;margin-top:14px;line-height:1.5}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#05080F;font-family:Geist,-apple-system,Segoe UI,Arial,sans-serif;color:#EEF1F6;-webkit-font-smoothing:antialiased}
+  .card{background:#0E1624;border:1px solid #1B2636;border-radius:18px;padding:36px;width:400px;max-width:calc(100vw - 32px);box-sizing:border-box}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:8px}.brand i{width:11px;height:11px;border-radius:50%;background:#E5383B;box-shadow:0 0 0 5px rgba(229,56,59,.18);display:inline-block}
+  .brand b{font-family:Newsreader,Georgia,serif;font-weight:400;font-size:30px;letter-spacing:-.02em}.sub{font-size:13px;line-height:1.5;color:#8C9AB0;margin:0 0 18px}
+  label{display:block;font-size:12px;color:#8C9AB0;margin:12px 0 5px}
+  input{width:100%;box-sizing:border-box;padding:12px 14px;border:1px solid #2A384D;border-radius:12px;font:inherit;font-size:15px;background:#0A101B;color:#EEF1F6}
+  input:focus{outline:2px solid #FF6B6B;outline-offset:2px}
+  button{width:100%;margin-top:18px;padding:13px;border:0;border-radius:999px;background:#E5383B;color:#fff;font:inherit;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s}
+  button:hover{background:#FF6B6B}button[disabled]{opacity:.6;cursor:wait}
+  .err{color:#FF8A8A;font-size:13px;margin-top:10px;min-height:16px}.note{font-size:12.5px;color:#8C9AB0;margin-top:14px;line-height:1.5}
   .code{font-family:Consolas,Menlo,monospace;font-size:24px;letter-spacing:.3em;text-align:center}
-  .hidden{display:none}.link{background:none;color:#2563EB;font-weight:500;font-size:13px;margin-top:10px;padding:0}
+  .hidden{display:none}.link{background:none;color:#B3BFD0;font-weight:500;font-size:13px;margin-top:10px;padding:0}.link:hover{background:none;color:#EEF1F6}
 </style></head>
 <body>
 <div class="card">
-  <div class="brand"><i></i><b>Newsroom OS</b></div>
-  <p class="sub">Read-only guest access. A one-time code goes to your email.</p>
+  <div class="brand"><i></i><b>Echo</b></div>
+  <p class="sub" style="margin-bottom:8px">Listens to social chatter, wire services and breaking news cycles.</p>
+  <p class="sub">Demo access. A one-time code goes to your email.</p>
+  <p id="ended" class="sub hidden" style="background:#2A2010;color:#F6C777;padding:10px 12px;border-radius:10px">Your 15-minute demo session has ended. Thanks for taking a look — contact Gautam for extended access.</p>
   <form id="f1">
     <label>Your name</label><input id="name" autocomplete="name" required maxlength="80">
     <label>Work email</label><input id="email" type="email" autocomplete="email" required maxlength="160">
-    <label>Organisation <span style="color:#9CA3AF">(optional)</span></label><input id="org" autocomplete="organization" maxlength="120">
+    <label>Organisation <span style="color:#5E6B80">(optional)</span></label><input id="org" autocomplete="organization" maxlength="120">
     <button id="b1" type="submit">Email me a code</button>
     <div id="e1" class="err"></div>
-    <p class="note">Guest sessions last 48 hours and can't change settings, spend API budget or publish. Gautam is notified when you enter.</p>
+    <p class="note">Demo sessions last 15 minutes: the live board, alerts and on-air monitor, Hyper Search, N-Pro scripting, and up to 3 live X pulls. Settings and publishing stay locked. Gautam is notified when you enter.</p>
   </form>
   <form id="f2" class="hidden">
     <p class="sub" id="sent"></p>
     <label>6-digit code</label><input id="code" class="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required>
-    <button id="b2" type="submit">Enter the newsroom</button>
+    <button id="b2" type="submit">Enter Echo</button>
     <div id="e2" class="err"></div>
     <button type="button" class="link" id="again">Didn't get it? Send another code</button>
   </form>
@@ -178,6 +233,7 @@ _GUEST_HTML = """<!DOCTYPE html>
 <script>
 const $=id=>document.getElementById(id);
 const src=new URLSearchParams(location.search).get('src')||'direct';
+if(new URLSearchParams(location.search).get('ended'))$('ended').classList.remove('hidden');
 async function post(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let d={};try{d=await r.json();}catch{}return {ok:r.ok&&d.ok,d};}
 $('f1').onsubmit=async e=>{e.preventDefault();$('e1').textContent='';$('b1').disabled=true;
   const {ok,d}=await post('/api/guest/request',{name:$('name').value,email:$('email').value,org:$('org').value,source:src});
@@ -220,7 +276,7 @@ def guest_verify(request: Request, payload: dict = Body(...)):
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     resp = JSONResponse({"ok": True, "name": visitor.get("name", "")})
     resp.set_cookie(guest.COOKIE, guest.make_token(visitor["email"], visitor.get("name", "")),
-                    max_age=guest.SESSION_HOURS * 3600, httponly=True, samesite="lax",
+                    max_age=guest.SESSION_MINUTES * 60, httponly=True, samesite="lax",
                     secure=config.IS_SERVERLESS)
     return resp
 
@@ -232,7 +288,8 @@ def whoami(request: Request):
         return {"role": "editor"}
     g = getattr(request.state, "guest", None)
     if g:
-        return {"role": "guest", "name": g["name"], "email": g["email"]}
+        return {"role": "guest", "name": g["name"], "email": g["email"],
+                "quota": guest.remaining(g["email"]), "expires_at": g["exp"]}
     return {"role": "anonymous"}
 
 
@@ -316,6 +373,20 @@ def alerts_feed(hours: int = 12, limit: int = 40):
              ).isoformat()
     items = []
     with db.connect() as con:
+        # board stories: flagged the moment a breaking or high-ranking story is
+        # FIRST detected (first_seen_at), not when its article was published
+        for r in con.execute(
+                "SELECT id, title, publisher, status, score, first_seen_at FROM stories "
+                "WHERE first_seen_at >= ? AND (status='breaking' OR score >= ?) "
+                "ORDER BY first_seen_at DESC LIMIT ?",
+                (since, ALERT_STORY_SCORE, limit)).fetchall():
+            if ingest._FOLLOWUP_RE.search(r["title"] or ""):
+                continue  # explainers/follow-ups are not breaking signals
+            brk = r["status"] == "breaking"
+            items.append({"kind": "story", "source": r["publisher"] or "Board",
+                          "title": r["title"], "at": r["first_seen_at"],
+                          "story_id": r["id"],
+                          "tag": "BREAKING" if brk else f"NEW ON BOARD · SCORE {r['score']}"})
         for r in con.execute(
                 "SELECT channel, headline, breaking, first_seen FROM live_onair "
                 "WHERE first_seen >= ? AND breaking=1 "
@@ -344,6 +415,51 @@ def alerts_feed(hours: int = 12, limit: int = 40):
                           "tag": "HIGH DEMAND" if r["high_demand"] else "VIRAL SPIKE"})
     items.sort(key=lambda i: i["at"] or "", reverse=True)
     return items[:limit]
+
+
+ALERT_STORY_SCORE = 55        # non-breaking stories at/above this still alert
+ALERT_SCAN_MIN_SECONDS = 150  # floor between source scans, shared by all viewers
+_ALERT_SCAN_KEY = "alerts_last_scan"
+
+
+@app.post("/api/alerts/scan")
+async def alerts_scan():
+    """Go and LOOK for new breaking signals instead of re-reading what is stored.
+
+    The Alerts page calls this on a loop while it is open: a story ingest cycle
+    (Google News past-hour discovery + the source matrix) and the keyless
+    on-air poll of rival channels. Both are free. One scan serves every viewer —
+    the timestamp in settings throttles it across serverless invocations."""
+    from datetime import datetime, timezone
+    from app import settings_store
+    now = datetime.now(timezone.utc)
+    last = settings_store.get_setting(_ALERT_SCAN_KEY, "")
+    try:
+        age = (now - datetime.fromisoformat(last)).total_seconds() if last else None
+    except ValueError:
+        age = None
+    if age is not None and age < ALERT_SCAN_MIN_SECONDS:
+        return {"scanned": False, "last_scan": last,
+                "next_in": int(ALERT_SCAN_MIN_SECONDS - age)}
+    settings_store.set_setting(_ALERT_SCAN_KEY, now.isoformat())
+
+    def _scan() -> dict:
+        from app.news import live_monitor, onair
+        out = {}
+        for name, fn in (("stories", lambda: ingest.run_ingest_cycle(manual=True)),
+                         ("clips", live_monitor.run_live_cycle),
+                         ("onair", onair.run_onair_cycle)):
+            try:
+                res = fn()
+                out[name] = (res.get("new_stories", res.get("ok", True))
+                             if isinstance(res, dict) else True)
+            except Exception as exc:  # one dead source must not stop the others
+                out[name] = f"failed: {exc}"
+        return out
+
+    result = await asyncio.get_running_loop().run_in_executor(None, _scan)
+    return {"scanned": True, "last_scan": now.isoformat(),
+            "next_in": ALERT_SCAN_MIN_SECONDS, **result}
 
 
 @app.get("/api/velocity")
@@ -422,7 +538,7 @@ def live_coverage(hours: int = 12):
 
 
 @app.post("/api/live-coverage/refresh")
-async def live_coverage_refresh(hours: int = 12):
+async def live_coverage_refresh(request: Request, hours: int = 12):
     """Refresh on-air coverage, then return the hourly digest.
 
     Primary source is the channels' own X accounts (authoritative "we aired
@@ -432,7 +548,11 @@ async def live_coverage_refresh(hours: int = 12):
     worker, not on this request path."""
     from app.news import onair, channel_x
     loop = asyncio.get_running_loop()
-    x = await loop.run_in_executor(None, channel_x.poll_channel_x)
+    # demo guests refresh from the keyless poll only — their X allowance is
+    # the metered X-desk pull, not this button
+    is_guest = bool(getattr(request.state, "guest", None))
+    x = ({"ok": False} if is_guest
+         else await loop.run_in_executor(None, channel_x.poll_channel_x))
     if not x.get("ok"):  # no key / API error -> keyless fallback
         await loop.run_in_executor(None, onair.run_onair_cycle)
     return await loop.run_in_executor(
@@ -448,11 +568,14 @@ def cron_brief(request: Request, secret: str = ""):
 
 
 @app.post("/api/x/refresh")
-async def x_refresh():
+async def x_refresh(request: Request):
     """Manual X-desk refresh (~3 API calls) followed by a free story re-rank,
     so fresh tweets flow straight into keywords and rankings."""
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(None, pipeline.manual_refresh)
+    g = getattr(request.state, "guest", None)
+    if g:  # tell the demo guest what is left of their allowance
+        result["guest_pulls_left"] = guest.remaining(g["email"])["x"]
     if result.get("ok"):
         loop.run_in_executor(None, lambda: ingest.run_ingest_cycle(manual=True))
         result["stories_refreshing"] = True
@@ -584,7 +707,12 @@ async def npro_chat(payload: dict = Body(...)):
     if keyword:
         items = await loop.run_in_executor(
             None, lambda: retrieval.search_news_past_hour(keyword, 5))
-        return {"mode": "latest", "answer": engine.past_hour_brief(keyword, items),
+        widened = not items
+        if widened:  # quiet hour: show today's newest instead of a dead end
+            items = await loop.run_in_executor(
+                None, lambda: retrieval.search_news_today(keyword, 5))
+        return {"mode": "latest",
+                "answer": engine.past_hour_brief(keyword, items, widened),
                 "topic": keyword, "retrieved": items, "has_key": engine.has_key()}
 
     desk_q = engine.is_desk_question(query)
@@ -652,6 +780,37 @@ async def npro_intelligence(payload: dict = Body(...)):
     topic = (story or {}).get("title") or payload.get("topic") or ""
     return await asyncio.get_running_loop().run_in_executor(
         None, lambda: engine.intelligence(topic, story, payload.get("retrieved") or []))
+
+
+# --------------------------------------------------------------------------
+# Hyper Search — Google + YouTube + X trends, merged and scored (app/hyper.py)
+# --------------------------------------------------------------------------
+@app.get("/api/hyper")
+def hyper_latest():
+    """Last stored scan and deck — never triggers a fetch."""
+    from app import hyper
+    return {"scan": hyper.latest_scan(), "deck": hyper.latest_deck()}
+
+
+@app.post("/api/hyper/scan")
+async def hyper_scan(request: Request, force: bool = False):
+    """Scan the three platforms (served from a 10-minute cache). Google and
+    YouTube are free; the X trends call is billed, so only an editor's scan may
+    spend it, and at most once an hour — guests reuse the stored X list."""
+    from app import hyper
+    is_guest = bool(getattr(request.state, "guest", None))
+    return await asyncio.get_running_loop().run_in_executor(
+        None, lambda: hyper.get_scan(force=force and not is_guest,
+                                     spend_x=not is_guest))
+
+
+@app.post("/api/hyper/deck")
+async def hyper_deck(force: bool = False):
+    """AI production deck over the scan + last 24h of board stories. Editor
+    only: the guest gate does not list this path, so guests get 403."""
+    from app import hyper
+    return await asyncio.get_running_loop().run_in_executor(
+        None, lambda: hyper.build_deck(force=force))
 
 
 @app.get("/api/settings")

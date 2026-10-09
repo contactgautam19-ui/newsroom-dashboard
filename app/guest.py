@@ -26,7 +26,8 @@ OTP_TTL_MIN = 10
 OTP_MAX_ATTEMPTS = 5
 PER_EMAIL_PER_HOUR = 3        # codes one address may request per hour
 GLOBAL_PER_HOUR = 40          # codes the endpoint will send per hour in total
-SESSION_HOURS = 48
+SESSION_MINUTES = 15          # a demo sitting; the cookie and token both expire
+SESSIONS_PER_DAY = 2          # sittings one address may start in 24 hours
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
 
@@ -43,7 +44,7 @@ def _secret() -> bytes:
 
 
 def make_token(email: str, name: str) -> str:
-    exp = int(time.time()) + SESSION_HOURS * 3600
+    exp = int(time.time()) + SESSION_MINUTES * 60
     name = name.replace("|", "/")
     payload = f"{exp}|{email.lower()}|{name}"
     sig = hmac.new(_secret(), payload.encode(), hashlib.sha256).hexdigest()[:32]
@@ -68,6 +69,58 @@ def parse_token(token: str | None) -> dict | None:
         return {"email": email, "name": name, "exp": int(exp_s)}
     except Exception:
         return None
+
+
+# --------------------------------------------------------------------------
+# demo quotas — a guest can exercise the paid features, but only a little
+# --------------------------------------------------------------------------
+# kind -> (per-guest allowance, what the guest is told when it runs out)
+QUOTAS = {
+    "x": (3, "Demo limit reached — each guest gets 3 live X pulls. "
+             "The feed keeps showing the latest stored posts."),
+    "ai": (25, "Demo limit reached — each guest gets 25 N-Pro requests. "
+               "Ask Gautam for full access."),
+}
+GUEST_X_PULLS_PER_DAY = 12    # all guests combined, protects the monthly X budget
+
+
+def _use_key(kind: str, email: str) -> str:
+    return f"guest_use:{kind}:{email.lower()}"
+
+
+def _count(key: str) -> int:
+    from app import settings_store
+    try:
+        return int(settings_store.get_setting(key, "0") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def remaining(email: str) -> dict:
+    """What this guest has left, per quota kind."""
+    return {kind: max(0, limit - _count(_use_key(kind, email)))
+            for kind, (limit, _) in QUOTAS.items()}
+
+
+def consume(email: str, kind: str) -> str | None:
+    """Spend one unit of a guest quota. Returns None when allowed, otherwise the
+    message to show the guest. Counts live in the settings table, so they hold
+    across serverless invocations and across the guest's 48-hour session."""
+    from app import settings_store
+    limit, message = QUOTAS[kind]
+    key = _use_key(kind, email)
+    used = _count(key)
+    if used >= limit:
+        return message
+    if kind == "x":
+        day_key = f"guest_x_day:{_now().date().isoformat()}"
+        today = _count(day_key)
+        if today >= GUEST_X_PULLS_PER_DAY:
+            return ("Live X pulls for demo guests are used up for today. "
+                    "The feed keeps showing the latest stored posts.")
+        settings_store.set_setting(day_key, str(today + 1))
+    settings_store.set_setting(key, str(used + 1))
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -107,6 +160,14 @@ def request_code(name: str, email: str, org: str, source: str, user_agent: str) 
             (email, hour_ago)).fetchone()["c"]
         if mine >= PER_EMAIL_PER_HOUR:
             raise GuestError("Too many codes requested for this address. Try again in an hour.")
+        # a 15-minute sitting means little if it can be restarted at will
+        day_ago = (now - timedelta(hours=24)).isoformat()
+        sittings = con.execute(
+            "SELECT COUNT(*) c FROM guest_otps WHERE email = ? AND used = 1 AND created_at > ?",
+            (email, day_ago)).fetchone()["c"]
+        if sittings >= SESSIONS_PER_DAY:
+            raise GuestError("You've used today's demo sessions for this address. "
+                             "Contact Gautam for extended access.")
         total = con.execute(
             "SELECT COUNT(*) c FROM guest_otps WHERE created_at > ?", (hour_ago,)).fetchone()["c"]
         if total >= GLOBAL_PER_HOUR:
@@ -127,7 +188,7 @@ def request_code(name: str, email: str, org: str, source: str, user_agent: str) 
 
     from app import briefing
     html = _code_email(name, code)
-    err = briefing.send_mail([email], f"Your Newsroom OS guest code: {code}", html)
+    err = briefing.send_mail([email], f"Your Echo guest code: {code}", html)
     if err is None:
         return {"ok": True}
     if not config.EMAIL_ENABLED and not config.IS_SERVERLESS:
@@ -183,10 +244,10 @@ def list_visitors(limit: int = 100) -> list[dict]:
 # --------------------------------------------------------------------------
 def _code_email(name: str, code: str) -> str:
     return f"""<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:480px;margin:0 auto;padding:28px 24px;color:#111">
-  <p style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#888;margin:0 0 14px">Newsroom OS · guest access</p>
+  <p style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#888;margin:0 0 14px">Echo · guest access</p>
   <p style="font-size:16px;margin:0 0 18px">Hi {name}, here is your one-time code:</p>
   <p style="font-size:34px;font-weight:700;letter-spacing:.18em;margin:0 0 18px;font-family:Consolas,Menlo,monospace">{code}</p>
-  <p style="font-size:14px;color:#555;margin:0 0 8px">It expires in {OTP_TTL_MIN} minutes. Your guest session is read-only and lasts {SESSION_HOURS} hours.</p>
+  <p style="font-size:14px;color:#555;margin:0 0 8px">It expires in {OTP_TTL_MIN} minutes. Your demo session lasts {SESSION_MINUTES} minutes from the moment you enter.</p>
   <p style="font-size:13px;color:#888;margin:18px 0 0">If you didn't request this, ignore the email — nothing happens without the code.</p>
 </div>"""
 
@@ -200,7 +261,7 @@ def _notify_editor(v: dict) -> None:
         when = datetime.now(timezone(timedelta(hours=5, minutes=30))).strftime("%d %b %Y, %I:%M %p IST")
         org = f" ({v.get('org')})" if v.get("org") else ""
         html = f"""<div style="font-family:-apple-system,Segoe UI,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
-  <p style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#888;margin:0 0 12px">Newsroom OS · guest entered</p>
+  <p style="font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#888;margin:0 0 12px">Echo · guest entered</p>
   <p style="font-size:18px;margin:0 0 14px"><strong>{v.get('name') or v.get('email')}</strong>{org} just opened the dashboard.</p>
   <table style="font-size:14px;border-collapse:collapse">
     <tr><td style="color:#888;padding:3px 14px 3px 0">Email</td><td>{v.get('email')}</td></tr>
@@ -208,9 +269,9 @@ def _notify_editor(v: dict) -> None:
     <tr><td style="color:#888;padding:3px 14px 3px 0">Visits</td><td>{v.get('visits', 1)}</td></tr>
     <tr><td style="color:#888;padding:3px 14px 3px 0">When</td><td>{when}</td></tr>
   </table>
-  <p style="font-size:13px;color:#888;margin:18px 0 0">Guest sessions are read-only. The full list is on the Ops desk.</p>
+  <p style="font-size:13px;color:#888;margin:18px 0 0">Demo sessions last 15 minutes with metered X and N-Pro use. The full list is on the Ops desk.</p>
 </div>"""
-        subject = f"Guest entered the Newsroom OS: {v.get('name') or v.get('email')}{org}"
+        subject = f"Guest entered Echo: {v.get('name') or v.get('email')}{org}"
         err = briefing.send_mail(to, subject, html)
         if err:
             log.warning("guest notification failed: %s", err)

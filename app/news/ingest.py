@@ -488,6 +488,77 @@ def run_ingest_cycle(manual: bool = False) -> dict:
     return result
 
 
+# ── event phase: is this HAPPENING now, or a fresh article on an older story? ──
+# Publish time alone can't tell the two apart: an explainer filed 10 minutes ago
+# about yesterday's verdict is "new" by timestamp but not a breaking development.
+_FOLLOWUP_RE = re.compile(
+    r"\bexplained\b|\bexplainer\b|\bwhat we know\b|\btimeline\b|\banalysis\b|"
+    r"\bopinion\b|\beditorial\b|\bfact[- ]check\b|\brecap\b|\blook back\b|"
+    r"\bkey takeaways\b|\ball you need to know\b|\bhere'?s (what|why|how)\b|"
+    r"\b(a|one|two|three|four|five|\d+) (days?|weeks?|months?|years?) "
+    r"(after|later|since|on|ago)\b|\bdays after\b|\byesterday\b|"
+    r"\blast (week|month|year|night)\b|\banniversary\b|\bthrowback\b",
+    re.I,
+)
+EVENT_LOOKBACK_HOURS = 96      # how far back we look for the story's first report
+EVENT_ORIGIN_MIN_AGE_MIN = 120  # an earlier report this old makes it a running story
+
+
+def _same_running_story(a: set[str], b: set[str]) -> bool:
+    """Stricter than _same_event: used to tie a fresh article to an OLDER report,
+    where a false match would wrongly demote a genuinely new story. Two shared
+    names are not enough (a politician makes news daily) — the titles must share
+    three significant tokens, two of them distinctive, or mostly overlap."""
+    shared = a & b
+    if len(shared) < 2:
+        return False
+    distinctive = [w for w in shared if w not in _COMMON_EVENT_WORDS]
+    if len(shared) >= 3 and len(distinctive) >= 2:
+        return True
+    return len(distinctive) >= 2 and len(shared) / max(1, min(len(a), len(b))) >= 0.6
+
+
+def _annotate_event_phase(con, rundown: list[dict]) -> None:
+    """Tag each board story with ``event_phase``:
+      breaking_now — the event itself surfaced in the last hour and is confirmed
+                     (breaking marker, 2+ outlets, or a rival channel airing it)
+      just_in      — first report in the last hour, single source so far
+      followup     — a newly published article on a story that broke earlier
+    plus ``event_started_at`` (first report we hold) and a one-line reason."""
+    if not rundown:
+        return
+    now = datetime.now(timezone.utc)
+    lookback = (now - timedelta(hours=EVENT_LOOKBACK_HOURS)).isoformat()
+    older_than = (now - timedelta(minutes=EVENT_ORIGIN_MIN_AGE_MIN)).isoformat()
+    history = [
+        (r["published_at"], _sig_tokens(r["title"]))
+        for r in con.execute(
+            "SELECT title, published_at FROM stories "
+            "WHERE published_at >= ? AND published_at < ? "
+            "ORDER BY published_at ASC LIMIT 2500", (lookback, older_than)).fetchall()
+    ]
+    for s in rundown:
+        toks = _sig_tokens(s.get("title") or "")
+        origin = next((pub for pub, htoks in history
+                       if len(toks) >= 2 and _same_running_story(toks, htoks)), None)
+        marker = _FOLLOWUP_RE.search(s.get("title") or "")
+        if origin or marker:
+            s["event_phase"] = "followup"
+            s["event_started_at"] = origin
+            s["event_note"] = ("New article on a story first reported earlier"
+                               if origin else
+                               f"Follow-up / explainer format (“{marker.group(0)}”)")
+            continue
+        s["event_started_at"] = s.get("published_at")
+        confirmed = (s.get("status") == "breaking"
+                     or len(s.get("sources") or []) >= 2
+                     or bool(s.get("rival_coverage")))
+        s["event_phase"] = "breaking_now" if confirmed else "just_in"
+        s["event_note"] = ("First reported within the hour and corroborated"
+                           if confirmed else
+                           "First reported within the hour — single source so far")
+
+
 def get_rundown(limit: int = 12) -> list[dict]:
     # Strict last-hour board: never surface a story published more than
     # BOARD_WINDOW_HOURS ago, regardless of when it was ingested or retired.
@@ -506,6 +577,10 @@ def get_rundown(limit: int = 12) -> list[dict]:
                 (story["id"],),
             ).fetchall()
             story["breakdown"] = db.rows_to_dicts(br)
+        try:
+            _annotate_event_phase(con, rundown)
+        except Exception:
+            pass  # phase tags are advisory — never block the board
     return rundown
 
 

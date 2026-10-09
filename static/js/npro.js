@@ -32,7 +32,7 @@ const NPro = (() => {
     if (!meta) { try { meta = await (await fetch('/api/npro/formats')).json(); } catch {} }
     let data;
     try { data = await postJSON('/api/npro/open', { story_id: storyId }); }
-    catch { clearTyping(); msgAI('I couldn’t reach the desk. Try again in a moment.'); return; }
+    catch (e) { if (e.limit) return; clearTyping(); msgAI('I couldn’t reach the desk. Try again in a moment.'); return; }
     applyRetrieval(data, true);
   }
 
@@ -59,7 +59,7 @@ const NPro = (() => {
     const wrap = document.createElement('div');
     wrap.className = 'fade-up flex ' + (side === 'user' ? 'justify-end' : 'justify-start');
     wrap.innerHTML = side === 'user'
-      ? `<div class="max-w-[85%] bg-navy text-white rounded-2xl rounded-br-sm px-4 py-2.5 text-[14px]">${inner}</div>`
+      ? `<div class="max-w-[85%] bg-paper text-ink border border-line rounded-2xl rounded-br-sm px-4 py-2.5 text-[14px]">${inner}</div>`
       : `<div class="max-w-[92%] w-full"><div class="flex items-center gap-2 mb-1"><span class="w-5 h-5 rounded bg-brand text-white text-[10px] font-extrabold flex items-center justify-center">N</span><span class="text-[11.5px] font-semibold text-sub">N-Pro</span></div><div class="bg-white border border-line rounded-2xl rounded-tl-sm px-4 py-3 text-[14px] leading-relaxed">${inner}</div></div>`;
     thread().appendChild(wrap);
     scrollDown();
@@ -84,7 +84,7 @@ const NPro = (() => {
       if (inList) { out.push('</ul>'); inList = false; }
       if (!t) continue;
       if (/^<b>[^<]{2,60}<\/b>:?$/.test(t)) {
-        out.push(`<p class="font-bold text-navy mt-3 first:mt-0 mb-0.5">${t}</p>`);
+        out.push(`<p class="font-semibold text-ink mt-3 first:mt-0 mb-0.5">${t}</p>`);
       } else {
         out.push(`<p class="mb-1">${ln}</p>`);
       }
@@ -119,14 +119,33 @@ const NPro = (() => {
     loadIntel();
   }
 
+  function srcAge(iso) {
+    if (!iso) return '';
+    const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    if (mins < 60) return `${mins}m ago`;
+    if (mins < 2880) return `${Math.floor(mins / 60)}h ago`;
+    return `${Math.floor(mins / 1440)}d ago`;
+  }
+
+  // Sources behind an answer, newest first, each stamped with its age — so an
+  // older report is never mistaken for a new development.
   function srcLine(n) {
-    return n ? `<p class="text-[11.5px] text-sub mb-2">Pulled ${n} recent report${n === 1 ? '' : 's'} from multiple publishers.</p>` : '';
+    if (!n) return '';
+    const items = (S.retrieved || []).slice(0, 8);
+    const newest = items[0] && items[0].published_at ? ` · newest ${srcAge(items[0].published_at)}` : '';
+    const rows = items.map(a => {
+      const old = a.published_at && (Date.now() - new Date(a.published_at).getTime()) > 86400000;
+      return `<li class="flex gap-2"><span class="shrink-0 w-[58px] ${old ? 'text-amber6' : 'text-green6'} font-semibold">${srcAge(a.published_at) || '—'}</span>
+        <span class="min-w-0"><a href="${esc(a.url)}" target="_blank" class="hover:underline">${esc(a.title)}</a> <span class="text-sub">${esc(a.publisher || '')}</span></span></li>`;
+    }).join('');
+    return `<details class="mb-2 text-[11.5px]"><summary class="text-sub cursor-pointer select-none">Pulled ${n} report${n === 1 ? '' : 's'}${newest} — show sources</summary>
+      <ul class="mt-1.5 space-y-1">${rows}</ul></details>`;
   }
 
   // ── format menu ─────────────────────────────────────────────────────────────
   function askFormat() {
     const btns = (meta?.formats || []).map(f =>
-      `<button onclick="NPro.pickFormat('${f.id}')" class="flex items-center gap-2 border border-line rounded-xl px-3.5 py-2.5 text-left hover:border-navy hover:bg-paper transition-colors">
+      `<button onclick="NPro.pickFormat('${f.id}')" class="flex items-center gap-2 border border-line rounded-xl px-3.5 py-2.5 text-left hover:border-ink hover:bg-paper transition-colors">
          <span class="text-[16px]">${f.icon}</span>
          <span><span class="block text-[13.5px] font-semibold">${esc(f.label)}</span><span class="block text-[11.5px] text-sub">${esc(f.blurb)}</span></span>
        </button>`).join('');
@@ -159,9 +178,9 @@ const NPro = (() => {
 
   function renderChips(q, allowCustom) {
     const opts = q.options.map(o =>
-      `<button data-fid="${esc(S.format)}" data-qi="${S.qIndex}" data-val="${esc(o)}" onclick="NPro.answerEl(this)" class="px-3 py-1.5 rounded-lg text-[13px] font-semibold border border-line bg-white hover:border-navy">${esc(o)}</button>`).join('');
+      `<button data-fid="${esc(S.format)}" data-qi="${S.qIndex}" data-val="${esc(o)}" onclick="NPro.answerEl(this)" class="px-3 py-1.5 rounded-lg text-[13px] font-semibold border border-line bg-white hover:border-ink">${esc(o)}</button>`).join('');
     const custom = allowCustom ? `
-      <button onclick="NPro.showCustom(this)" class="px-3 py-1.5 rounded-lg text-[13px] font-semibold border border-dashed border-line bg-white hover:border-navy">Custom…</button>
+      <button onclick="NPro.showCustom(this)" class="px-3 py-1.5 rounded-lg text-[13px] font-semibold border border-dashed border-line bg-white hover:border-ink">Custom…</button>
       <div class="hidden w-full mt-2 flex gap-2">
         <input type="text" placeholder="${esc(q.custom_hint || 'Type a custom value')}" class="flex-1 border border-line rounded-lg px-3 py-2 text-[13px]" onkeydown="if(event.key==='Enter')NPro.answerText('${S.format}', ${S.qIndex}, this.value)">
         <button onclick="NPro.answerText('${S.format}', ${S.qIndex}, this.previousElementSibling.value)" class="bg-navy text-white rounded-lg px-3 text-[13px] font-semibold">Use</button>
@@ -192,7 +211,7 @@ const NPro = (() => {
       <div id="npro-guest-list" class="space-y-1 mb-2 text-[13px]"></div>
       <div data-guestform class="border border-line rounded-xl p-3">${fields}
         <div class="flex gap-2 mt-1">
-          <button onclick="NPro.addGuest(this)" class="flex-1 border border-line rounded-lg px-3 py-2 text-[13px] font-semibold hover:border-navy">＋ Add guest</button>
+          <button onclick="NPro.addGuest(this)" class="flex-1 border border-line rounded-lg px-3 py-2 text-[13px] font-semibold hover:border-ink">＋ Add guest</button>
           <button onclick="NPro.finishGuests('${S.format}', ${S.qIndex})" class="bg-navy text-white rounded-lg px-4 py-2 text-[13px] font-semibold">Build debate</button>
         </div>
       </div>`);
@@ -246,7 +265,7 @@ const NPro = (() => {
       res = await postJSON('/api/npro/generate', {
         story_id: S.storyId, format: S.format, params: S.params, retrieved: S.retrieved,
       });
-    } catch { return msgAI('Generation failed — try again.'); }
+    } catch (e) { return e.limit ? null : msgAI('Generation failed — try again.'); }
     if (!res.ok) return msgAI(esc(res.error || 'Could not generate.'));
     S.lastScript = res.script;
     S.convo.push({ role: 'assistant', content: res.script || '' });
@@ -258,7 +277,7 @@ const NPro = (() => {
       ? '<span class="bg-blue1 text-blue8 text-[10px] font-bold px-2 py-0.5 rounded">TEMPLATE</span>'
       : '<span class="bg-amber1 text-amber8 text-[10px] font-bold px-2 py-0.5 rounded">AI DRAFT — REVIEW</span>';
     const chips = (meta?.actions || []).map(a =>
-      `<button onclick="NPro.action('${a.id}', this)" class="px-2.5 py-1 rounded-lg text-[12px] font-medium border border-line bg-white hover:border-navy">${esc(a.label)}</button>`).join('');
+      `<button onclick="NPro.action('${a.id}', this)" class="px-2.5 py-1 rounded-lg text-[12px] font-medium border border-line bg-white hover:border-ink">${esc(a.label)}</button>`).join('');
     const w = msgAI(`
       <div class="flex items-center gap-2 mb-2">${badge}
         <button onclick="NPro.copyLast(this)" class="ml-auto text-[12px] text-accent font-semibold hover:underline">Copy</button></div>
@@ -273,7 +292,7 @@ const NPro = (() => {
   function fmtScript(text) {
     return esc(text)
       .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
-      .replace(/^([A-Z][A-Z0-9 ,'’\-\/&()]{2,}:)/gm, '<span class="font-bold text-navy">$1</span>');
+      .replace(/^([A-Z][A-Z0-9 ,'’\-\/&()]{2,}:)/gm, '<span class="font-semibold text-ink">$1</span>');
   }
 
   function copyLast(btn) {
@@ -293,7 +312,7 @@ const NPro = (() => {
     aiTyping();
     let res;
     try { res = await postJSON('/api/npro/action', { action: actionId, content, story_id: S.storyId, retrieved: S.retrieved }); }
-    catch { return msgAI('That action failed — try again.'); }
+    catch (e) { return e.limit ? null : msgAI('That action failed — try again.'); }
     if (!res.ok) return msgAI(esc(res.error || 'Action failed.'));
     // treat a full rewrite as a new script (with its own chips); others as a note
     const rewriteish = ['shorter', 'conversational', 'dramatic', 'more_facts', 'history', 'hindi', 'english', 'digital', 'ott'].includes(actionId);
@@ -319,7 +338,7 @@ const NPro = (() => {
     S.usedAngles.push(res.angle);
     res.items.forEach(it => { if (it.url) S.seenUrls.add(it.url); if (it.title) S.seenTitles.push(it.title); S.retrieved.push(it); });
     const items = res.items.map(it =>
-      `<li class="flex gap-2"><span class="text-sub">•</span><span><a href="${esc(it.url)}" target="_blank" class="hover:underline font-medium">${esc(it.title)}</a> <span class="text-sub text-[11.5px]">${esc(it.publisher || '')}</span></span></li>`).join('');
+      `<li class="flex gap-2"><span class="text-sub">•</span><span><a href="${esc(it.url)}" target="_blank" class="hover:underline font-medium">${esc(it.title)}</a> <span class="text-sub text-[11.5px]">${esc(it.publisher || '')}${it.published_at ? ' · ' + srcAge(it.published_at) : ''}</span></span></li>`).join('');
     msgAI(`<p class="text-[11px] font-bold uppercase tracking-widest text-accent mb-1.5">More context · ${esc(res.label)}</p>
       <ul class="space-y-1 text-[13px]">${items}</ul>`);
     loadIntel(); // panel keeps growing with the story
@@ -369,7 +388,7 @@ const NPro = (() => {
         history: S.convo.slice(-10),
       });
     }
-    catch { return msgAI('I couldn’t reach the desk — try again.'); }
+    catch (e) { return e.limit ? null : msgAI('I couldn’t reach the desk — try again.'); }
     clearTyping();
     S.convo.push({ role: 'user', content: q });
     S.convo.push({ role: 'assistant', content: data.answer || '' });
@@ -393,7 +412,7 @@ const NPro = (() => {
   function formatChips() {
     if (!meta?.formats) return '';
     const chips = meta.formats.map(f =>
-      `<button onclick="NPro.pickFormat('${f.id}')" class="px-2.5 py-1 rounded-lg text-[12px] font-semibold border border-line bg-white hover:border-navy">${f.icon} ${esc(f.label)}</button>`).join('');
+      `<button onclick="NPro.pickFormat('${f.id}')" class="px-2.5 py-1 rounded-lg text-[12px] font-semibold border border-line bg-white hover:border-ink">${f.icon} ${esc(f.label)}</button>`).join('');
     return `<div class="mt-3 pt-2.5 border-t border-line flex items-center gap-1.5 flex-wrap">
       <span class="text-[11.5px] text-sub font-medium">Produce:</span>${chips}</div>`;
   }
@@ -417,8 +436,8 @@ const NPro = (() => {
     renderRecent();
     if (!meta) { try { meta = await (await fetch('/api/npro/formats')).json(); } catch {} }
     const chips = STARTERS.map(s =>
-      `<button data-q="${esc(s)}" onclick="NPro.ask(this.dataset.q)" class="px-3 py-2 rounded-xl text-[12.5px] font-medium border border-line bg-white hover:border-navy text-left">${esc(s)}</button>`).join('');
-    msgAI(`<p class="font-bold text-navy mb-1">Your editorial board is in session.</p>
+      `<button data-q="${esc(s)}" onclick="NPro.ask(this.dataset.q)" class="px-3 py-2 rounded-xl text-[12.5px] font-medium border border-line bg-white hover:border-ink text-left">${esc(s)}</button>`).join('');
+    msgAI(`<p class="font-semibold text-ink mb-1">Your editorial board is in session.</p>
       <p class="mb-2.5">I'm watching the ranked board, the X desk, rival channels on air and viral velocity — ask me a desk question, or name any story to unpack it.</p>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">${chips}</div>`);
     document.getElementById('npro-input').focus();
@@ -428,7 +447,7 @@ const NPro = (() => {
   function renderRecent() {
     const el = document.getElementById('npro-recent');
     if (!el) return;
-    const stories = (window.StoryDesk?.stories || []).filter(s => !s.picked).slice(0, 8);
+    const stories = (typeof StoryDesk !== 'undefined' ? StoryDesk.stories : []).filter(s => !s.picked).slice(0, 8);
     el.innerHTML = stories.length ? stories.map(s =>
       `<button onclick="NPro.open(${s.id})" class="block w-full text-left px-2 py-1.5 rounded-lg hover:bg-navy2 text-[12.5px] text-white/80 truncate">${esc(s.title)}</button>`).join('')
       : '<p class="px-2 text-white/40 text-[12px]">No board stories loaded</p>';
@@ -444,7 +463,14 @@ const NPro = (() => {
   // ── utils ──────────────────────────────────────────────────────────────────
   async function postJSON(url, body) {
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    return res.json();
+    const data = await res.json();
+    if (data && data.limit_reached) {
+      // demo guest ran out of N-Pro requests: say so once, in the thread
+      msgAI(esc(data.error || 'Demo limit reached.'));
+      throw Object.assign(new Error('demo limit'), { limit: true });
+    }
+    if (!res.ok && !(data && 'ok' in data)) throw new Error(`HTTP ${res.status}`);
+    return data;
   }
   function jattr(s) { return JSON.stringify(String(s)); }
 
@@ -452,7 +478,7 @@ const NPro = (() => {
   let sugIndex = -1;
 
   function sugPool() {
-    const stories = (window.StoryDesk?.stories || []).slice(0, 20)
+    const stories = (typeof StoryDesk !== 'undefined' ? StoryDesk.stories : []).slice(0, 20)
       .map(s => 'Unpack: ' + s.title);
     return [...STARTERS, ...S.history, ...stories];
   }
