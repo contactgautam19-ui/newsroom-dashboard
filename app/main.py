@@ -135,7 +135,11 @@ async def passcode_gate(request: Request, call_next):
     if path.startswith("/api/"):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     if path == "/":
-        return landing_page()
+        # "/" answers differently for a stranger (landing page) and for someone
+        # signed in (the dashboard), so it must never be cached: a cached copy
+        # of the landing page was being served back to people who had just
+        # signed in, leaving them on the landing page.
+        return landing_page(shared=False)
     return RedirectResponse("/login", status_code=302)
 
 
@@ -171,7 +175,7 @@ async function submit(){
   const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({passcode:inp.value})});
   const d=await r.json();
-  if(d.ok){location.href='/';}else{err.textContent='Wrong passcode';inp.value='';inp.focus();}
+  if(d.ok){location.href='/?in='+Date.now();}else{err.textContent='Wrong passcode';inp.value='';inp.focus();}
 }
 document.getElementById('go').onclick=submit;
 inp.addEventListener('keydown',e=>{if(e.key==='Enter')submit();});
@@ -180,10 +184,12 @@ inp.addEventListener('keydown',e=>{if(e.key==='Enter')submit();});
 
 
 @app.get("/landing", response_class=HTMLResponse)
-def landing_page():
-    """Public marketing page. Also what an unauthenticated visitor sees at /."""
+def landing_page(shared: bool = True):
+    """Public marketing page. Also what an unauthenticated visitor sees at /.
+    ``shared`` = safe to cache: true at /landing, which is the same for everyone."""
     html = (config.STATIC_DIR / "landing.html").read_text(encoding="utf-8")
-    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=300"})
+    cache = "public, max-age=300" if shared else "no-store"
+    return HTMLResponse(html, headers={"Cache-Control": cache, "Vary": "Cookie"})
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -246,7 +252,7 @@ $('f2').onsubmit=async e=>{e.preventDefault();$('e2').textContent='';$('b2').dis
   const {ok,d}=await post('/api/guest/verify',{email:$('email').value,code:$('code').value});
   $('b2').disabled=false;
   if(!ok){$('e2').textContent=d.error||'Wrong code.';$('code').select();return;}
-  location.href='/#stories';};
+  location.href='/?in='+Date.now()+'#stories';};
 $('again').onclick=()=>{$('f2').classList.add('hidden');$('f1').classList.remove('hidden');};
 </script>
 </body></html>"""
@@ -919,7 +925,7 @@ def index():
     html = re.sub(r'src="/static/js/([^".?]+)\.js"', _bust, html)
     # HTML must always revalidate so the freshest version stamp reaches the
     # browser; the versioned JS URLs below can then be cached safely.
-    return HTMLResponse(html, headers={"Cache-Control": "no-cache, must-revalidate"})
+    return HTMLResponse(html, headers={"Cache-Control": "no-store", "Vary": "Cookie"})
 
 
 app.mount("/static", StaticFiles(directory=config.STATIC_DIR), name="static")
