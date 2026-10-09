@@ -12,3 +12,5 @@ briefings_out/
 _serverless_local.py
 worker.log
 worker.err.log
+
+promo/

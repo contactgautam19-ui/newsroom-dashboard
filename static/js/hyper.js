@@ -3,10 +3,15 @@
 //   Hyper   — the AI production deck built from those trends + the board
 
 const Social = (() => {
+  // one box per platform: its own header (mark, name, what the list means),
+  // a column-title row, then the ranked list
   const PLATFORM = {
-    google:  { label: 'Google Search', color: '#8FB4E8' },
-    youtube: { label: 'YouTube',       color: '#EC4A4D' },
-    x:       { label: 'X',             color: '#EEF1F6' },
+    google:  { label: 'Google Search', sub: 'What India is searching', unit: 'Searches', color: '#8FB4E8',
+               mark: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>' },
+    youtube: { label: 'YouTube', sub: 'What India is watching', unit: 'Views', color: '#EC4A4D',
+               mark: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>' },
+    x:       { label: 'X', sub: 'What India is posting', unit: '', color: '#EEF1F6',
+               mark: '<span class="text-[15px] font-bold leading-none">𝕏</span>' },
   };
   let data = null;
   let busy = false;
@@ -17,30 +22,38 @@ const Social = (() => {
 
   function column(p) {
     const c = PLATFORM[p];
-    const items = (data && data.trends && data.trends[p]) || [];
+    const items = ((data && data.trends && data.trends[p]) || []).slice(0, 15);
     const err = data && data.errors && data.errors[p];
     let body;
     if (items.length) {
-      body = `<ol class="space-y-0.5">${items.slice(0, 15).map((t, i) => `
-        <li class="group flex items-center gap-2 text-[13.5px] leading-snug rounded-lg px-1.5 py-1 -mx-1.5 hover:bg-paper">
-          <span class="w-5 shrink-0 text-right text-sub font-mono text-[11.5px]">${i + 1}</span>
+      body = `
+        <div class="flex items-center gap-2 px-4 py-2 border-b border-line text-[10.5px] uppercase tracking-widest text-sub">
+          <span class="w-6 text-right">#</span><span class="flex-1">Topic</span><span>${c.unit}</span>
+        </div>
+        <ol class="p-2">${items.map((t, i) => `
+        <li class="group flex items-center gap-2 text-[13.5px] leading-snug rounded-lg px-2 py-1.5 hover:bg-paper">
+          <span class="w-6 shrink-0 text-right font-mono text-[11.5px] ${i < 3 ? 'text-ink font-semibold' : 'text-sub'}">${i + 1}</span>
           <span class="min-w-0 flex-1 truncate" title="${esc(t.keyword)}">${t.url ? `<a href="${esc(t.url)}" target="_blank" class="hover:underline">${esc(t.keyword)}</a>` : esc(t.keyword)}</span>
-          ${t.volume ? `<span class="shrink-0 text-[11.5px] text-sub group-hover:hidden">${vol(t.volume)}</span>` : ''}
+          ${t.volume ? `<span class="shrink-0 font-mono text-[11.5px] text-sub group-hover:hidden">${vol(t.volume)}</span>` : ''}
           <button data-q="${esc(t.keyword)}" onclick="Social.unpack(this.dataset.q)" title="Unpack in N-Pro"
             class="hidden group-hover:block shrink-0 text-[11px] font-bold px-2 py-0.5 rounded-md bg-navy text-white">N-Pro</button>
         </li>`).join('')}</ol>`;
     } else if (p === 'youtube' && data && data.youtube_configured === false) {
-      body = '<p class="text-[12.5px] text-sub">API key needed.</p>';
+      body = '<p class="px-4 py-6 text-[12.5px] text-sub">API key needed.</p>';
     } else {
-      body = `<p class="text-[12.5px] text-sub">${esc(err || (data ? 'Nothing right now.' : 'Loading…'))}</p>`;
+      body = `<p class="px-4 py-6 text-[12.5px] text-sub">${esc(err || (data ? 'Nothing right now.' : 'Loading…'))}</p>`;
     }
     return `
-      <div class="bg-white border border-line rounded-2xl p-4">
-        <div class="flex items-center gap-2 mb-3">
-          <span class="w-2 h-2 rounded-full" style="background:${c.color}"></span>
-          <p class="text-[13.5px] font-bold">${c.label}</p>
-        </div>${body}
-      </div>`;
+      <section class="bg-white border border-line rounded-2xl overflow-hidden flex flex-col" aria-label="${c.label}">
+        <header class="flex items-center gap-3 px-4 py-3.5 bg-paper border-b border-line" style="box-shadow:inset 0 3px 0 ${c.color}">
+          <span class="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center" style="background:${c.color}1F;color:${c.color}">${c.mark}</span>
+          <div class="min-w-0">
+            <p class="text-[15px] font-semibold leading-tight">${c.label}</p>
+            <p class="text-[12px] text-sub leading-tight mt-0.5">${c.sub}</p>
+          </div>
+          ${items.length ? `<span class="ml-auto shrink-0 font-mono text-[11px] text-sub">${items.length} trending</span>` : ''}
+        </header>${body}
+      </section>`;
   }
 
   function render() {
