@@ -6,3 +6,4 @@ briefings_out/
 __pycache__/
 .claude/
 promo/
+tests/

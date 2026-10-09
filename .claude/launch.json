@@ -3,14 +3,20 @@
   "configurations": [
     {
       "name": "newsroom-dashboard",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["run.py"],
+      "runtimeExecutable": "py",
+      "runtimeArgs": [
+        "-3.14",
+        "run.py"
+      ],
       "port": 8000
     },
     {
       "name": "newsroom-serverless",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["_serverless_local.py"],
+      "runtimeExecutable": "py",
+      "runtimeArgs": [
+        "-3.14",
+        "_serverless_local.py"
+      ],
       "port": 8000
     }
   ]

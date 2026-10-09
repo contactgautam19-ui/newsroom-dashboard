@@ -24,6 +24,7 @@ from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
                                StreamingResponse)
 from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 
 from app import broker, config, db, events, guest, scheduler
 from app.news import ingest
@@ -65,6 +66,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Echo", lifespan=lifespan)
 
 
+@app.exception_handler(ValidationError)
+async def _bad_request(request: Request, exc: ValidationError):
+    """A request body that does not fit its schema is refused, not guessed at."""
+    first = exc.errors()[0] if exc.errors() else {}
+    where = ".".join(str(x) for x in first.get("loc", ()))
+    return JSONResponse({"ok": False, "error": "That request was not valid"
+                         + (f" ({where})." if where else ".")}, status_code=422)
+
+
 # --------------------------------------------------------------------------
 # Shared passcode gate (active only when PASSCODE is set — local dev unaffected)
 # --------------------------------------------------------------------------
@@ -82,12 +92,18 @@ _AUTH_EXEMPT_PREFIXES = ("/login", "/api/login", "/static/", "/api/cron/", "/gue
 _GUEST_POST_ALLOW = ("/api/guest/", "/api/ingest", "/api/alerts/scan",
                      "/api/live-coverage/refresh", "/api/x/refresh", "/api/npro/",
                      "/api/hyper/scan")
-_GUEST_BLOCK = ("/api/settings", "/api/sim/", "/api/guests")
+# the notebook holds the newsroom's own notes and scripts: not for demo guests
+_GUEST_BLOCK = ("/api/settings", "/api/sim/", "/api/guests", "/api/npro/records")
 # metered guest POSTs: path prefix -> quota kind. Context and the intelligence
 # panel fire automatically alongside these, so they are not counted twice.
 _GUEST_METERED = (("/api/x/refresh", "x"), ("/api/npro/open", "ai"),
                   ("/api/npro/chat", "ai"), ("/api/npro/retrieve", "ai"),
-                  ("/api/npro/generate", "ai"), ("/api/npro/action", "ai"))
+                  ("/api/npro/generate", "ai"), ("/api/npro/action", "ai"),
+                  ("/api/npro/note", "ai"))
+# these ride along with a metered call and cost nothing extra, but they stop
+# with it: once a guest's N-Pro allowance is spent they answer 429 too
+_GUEST_GATED = ("/api/npro/brief", "/api/npro/intelligence", "/api/npro/trace",
+                "/api/npro/context")
 _WRITE_RE = re.compile(r"^/api/stories/[0-9]+/write$")
 
 
@@ -99,6 +115,11 @@ def _guest_quota_block(path: str, email: str):
     if kind is None and _WRITE_RE.match(path):
         kind = "ai"
     if kind is None:
+        if (any(path.startswith(p) for p in _GUEST_GATED)
+                and guest.remaining(email).get("ai", 1) <= 0):
+            return JSONResponse({"ok": False, "error": "demo limit reached",
+                                 "summary": "", "traces": [], "items": []},
+                                status_code=429)
         return None
     message = guest.consume(email, kind)
     if message is None:
@@ -645,7 +666,7 @@ def story_articles(story_id: int):
 # --------------------------------------------------------------------------
 # N-Pro — AI news-script assistant (launched from Pick Story)
 # --------------------------------------------------------------------------
-def _npro_formats() -> list[dict]:
+def _npro_formats() -> dict:
     from app.npro import recipes
     out = []
     for fid in recipes.FORMAT_ORDER:
@@ -661,54 +682,107 @@ def npro_formats():
     return _npro_formats()
 
 
+def _npro_story(story_id):
+    from app.news.pack import build_pack
+    if story_id is None:
+        return None
+    try:
+        return build_pack(int(story_id))
+    except Exception:          # a story that has aged off the board
+        return None
+
+
+def _ndjson(events):
+    """Stream engine events to the console, one JSON object per line."""
+    def gen():
+        try:
+            for ev in events:
+                yield json.dumps(ev, ensure_ascii=False) + "\n"
+        except Exception:
+            logging.getLogger("npro").exception("stream failed")
+            yield json.dumps({"t": "done", "ok": False,
+                              "error": "Something went wrong while writing. Try again."}) + "\n"
+    return StreamingResponse(gen(), media_type="application/x-ndjson",
+                             headers={"Cache-Control": "no-store",
+                                      "X-Accel-Buffering": "no"})
+
+
 @app.post("/api/npro/open")
 async def npro_open(payload: dict = Body(...)):
-    """Open N-Pro on a picked story: retrieve fresh reporting, summarise, and
-    return the format menu + engine status."""
-    from app.news.pack import build_pack
-    from app.npro import engine, retrieval
-    story_id = payload.get("story_id")
-    story = build_pack(int(story_id)) if story_id is not None else None
-    topic = (story or {}).get("title") or payload.get("topic") or ""
+    """Open N-Pro on a picked story: pull the fresh reporting and return it
+    with the format menu straight away. The written brief follows separately
+    (/api/npro/brief) so the editor is never waiting on it to start a script."""
+    from app.npro import engine, retrieval, schemas
+    req = schemas.OpenIn.model_validate(payload)
+    engine.warm()
+    story = _npro_story(req.story_id)
+    topic = (story or {}).get("title") or req.topic
+    if not topic:
+        raise HTTPException(400, "story or topic required")
     loop = asyncio.get_running_loop()
     retrieved = await loop.run_in_executor(None, lambda: retrieval.search_news(topic))
-    summary = await loop.run_in_executor(None, lambda: engine.summarize(topic, retrieved))
     return {
         "topic": topic,
         "story": {"id": story.get("id"), "title": story.get("title"),
-                  "status": story.get("status"), "score": story.get("score"),
-                  "publisher": story.get("publisher")} if story else None,
-        "summary": summary, "retrieved": retrieved,
+                  "status": story.get("status"), "score": story.get("score")} if story else None,
+        "retrieved": retrieved,
         "has_key": engine.has_key(), **_npro_formats(),
     }
+
+
+@app.post("/api/npro/brief")
+async def npro_brief(payload: dict = Body(...)):
+    """The opening brief for a story already pulled by /open. Reads the
+    reports in full, which also warms them for the script that follows."""
+    from app.npro import engine, schemas
+    req = schemas.BriefIn.model_validate(payload)
+    if not req.topic:
+        raise HTTPException(400, "topic required")
+    loop = asyncio.get_running_loop()
+    reports = req.reports()
+    # the brief, and in parallel: pin the story to who / where / when and pull
+    # earlier reporting to weigh as background, ready for whichever format
+    summary, context = await asyncio.gather(
+        loop.run_in_executor(None, lambda: engine.summarize(req.topic, reports)),
+        loop.run_in_executor(None, lambda: engine.context_for(req.topic, reports)))
+    return {"summary": summary, **context}
 
 
 @app.post("/api/npro/retrieve")
 async def npro_retrieve(payload: dict = Body(...)):
     """Free-form question -> fresh reporting + a producer summary."""
-    from app.npro import engine, retrieval
-    query = (payload.get("query") or "").strip()
-    if not query:
-        raise HTTPException(400, "query required")
+    from app.npro import engine, retrieval, schemas
+    req = schemas.QueryIn.model_validate(payload)
     loop = asyncio.get_running_loop()
-    retrieved = await loop.run_in_executor(None, lambda: retrieval.search_news(query))
-    summary = await loop.run_in_executor(None, lambda: engine.summarize(query, retrieved))
-    return {"topic": query, "summary": summary, "retrieved": retrieved}
+    retrieved = await loop.run_in_executor(None, lambda: retrieval.search_news(req.query))
+    summary = await loop.run_in_executor(None, lambda: engine.summarize(req.query, retrieved))
+    return {"topic": req.query, "summary": summary, "retrieved": retrieved}
 
 
 @app.post("/api/npro/chat")
 async def npro_chat(payload: dict = Body(...)):
     """Editorial Intelligence chat. Desk questions ('what should lead?', 'what's
     viral?') are answered from the live desk snapshot; topic questions also pull
-    fresh reporting and unlock the production formats."""
-    from app.npro import engine, retrieval
-    query = (payload.get("query") or "").strip()
-    if not query:
-        raise HTTPException(400, "query required")
+    fresh reporting and unlock the production formats. A question about where a
+    line came from is answered from the reports themselves, not by the model."""
+    from app.npro import engine, retrieval, schemas
+    req = schemas.ChatIn.model_validate(payload)
+    query = req.query
     loop = asyncio.get_running_loop()
 
+    # "where did that come from?" about the script on screen
+    if engine.is_source_question(query) and (req.script or req.retrieved or req.record_id):
+        story = _npro_story(req.story_id)
+        found = await loop.run_in_executor(
+            None, lambda: engine.source_answer(query, req.script, story,
+                                               req.reports(), req.topic,
+                                               req.note_dict(), req.triad_dict(),
+                                               req.record_id))
+        return {"mode": "trace", "answer": "", "topic": None, "retrieved": [],
+                "has_key": engine.has_key(), **found}
+
     # "what's the latest on <keyword>" -> deterministic Google-News past-hour
-    # pull: freshest 5 headlines + source, no LLM required.
+    # pull: freshest 5 headlines, no LLM required.
     keyword = engine.latest_keyword(query)
     if keyword:
         items = await loop.run_in_executor(
@@ -722,14 +796,13 @@ async def npro_chat(payload: dict = Body(...)):
                 "topic": keyword, "retrieved": items, "has_key": engine.has_key()}
 
     desk_q = engine.is_desk_question(query)
-    history = payload.get("history") or []
+    history = [t.model_dump() for t in req.history]
     retrieved: list = []
     if not desk_q:
         retrieved = await loop.run_in_executor(
             None, lambda: retrieval.search_news(query))
     answer = await loop.run_in_executor(
-        None, lambda: engine.editorial_answer(
-            query, retrieved, payload.get("topic") or "", history=history))
+        None, lambda: engine.editorial_answer(query, retrieved, req.topic, history=history))
     return {"mode": "desk" if desk_q else "story", "answer": answer,
             "topic": None if desk_q else query, "retrieved": retrieved,
             "has_key": engine.has_key()}
@@ -738,54 +811,111 @@ async def npro_chat(payload: dict = Body(...)):
 @app.post("/api/npro/context")
 async def npro_context(payload: dict = Body(...)):
     """Get More Context: one fresh, non-duplicative angle."""
-    from app.npro import retrieval
-    topic = (payload.get("topic") or "").strip()
-    if not topic:
-        raise HTTPException(400, "topic required")
+    from app.npro import retrieval, schemas
+    req = schemas.ContextIn.model_validate(payload)
     return await asyncio.get_running_loop().run_in_executor(
         None, lambda: retrieval.more_context(
-            topic, payload.get("used_angles") or [],
-            payload.get("seen_urls") or [], payload.get("seen_titles") or []))
+            req.topic, req.used_angles, req.seen_urls, req.seen_titles))
+
+
+@app.post("/api/npro/note")
+async def npro_note(payload: dict = Body(...)):
+    """Take in a reporter's note in any Indian language: translate it, pin it
+    to who / where / when, and find context that passes that check. Streamed."""
+    from app.npro import engine, schemas
+    req = schemas.NoteIn.model_validate(payload)
+    return _ndjson(engine.note_events(req.text))
+
+
+@app.get("/api/npro/records")
+def npro_records():
+    """The notebook: every script written, newest first."""
+    from app.npro import ledger
+    return {"records": ledger.recent(40)}
+
+
+@app.get("/api/npro/records/{record_id}")
+def npro_record(record_id: str):
+    from app.npro import ledger
+    if not re.fullmatch(r"[0-9]{8}-[0-9]{6}-[0-9a-f]{6}", record_id):
+        raise HTTPException(404, "no such record")
+    rec = ledger.get(record_id)
+    if not rec:
+        raise HTTPException(404, "no such record")
+    for s in rec.get("sources") or []:      # the stored article text stays server-side
+        s["excerpt"] = (s.pop("text", "") or "")[:280]
+    return rec
+
+
+@app.post("/api/npro/generate/stream")
+async def npro_generate_stream(payload: dict = Body(...)):
+    """Write a script, streamed: the real steps, then the copy as it is written,
+    then the checked result."""
+    from app.npro import engine, schemas
+    req = schemas.GenerateIn.model_validate(payload)
+    story = _npro_story(req.story_id)
+    return _ndjson(engine.generate_events(story, req.format, req.params,
+                                          req.reports(), req.topic,
+                                          req.note_dict(), req.triad_dict()))
 
 
 @app.post("/api/npro/generate")
 async def npro_generate(payload: dict = Body(...)):
-    from app.news.pack import build_pack
-    from app.npro import engine
-    fmt = payload.get("format")
-    if not fmt:
-        raise HTTPException(400, "format required")
-    sid = payload.get("story_id")
-    story = build_pack(int(sid)) if sid is not None else None
+    from app.npro import engine, schemas
+    req = schemas.GenerateIn.model_validate(payload)
+    story = _npro_story(req.story_id)
     return await asyncio.get_running_loop().run_in_executor(
-        None, lambda: engine.generate(story, fmt, payload.get("params") or {},
-                                       payload.get("retrieved") or []))
+        None, lambda: engine.generate(story, req.format, req.params,
+                                       req.reports(), req.topic,
+                                       req.note_dict(), req.triad_dict()))
+
+
+@app.post("/api/npro/action/stream")
+async def npro_action_stream(payload: dict = Body(...)):
+    from app.npro import engine, schemas
+    req = schemas.ActionIn.model_validate(payload)
+    story = _npro_story(req.story_id)
+    return _ndjson(engine.action_events(req.action, req.content, story,
+                                        req.reports(), req.format, req.topic,
+                                        req.note_dict(), req.triad_dict()))
 
 
 @app.post("/api/npro/action")
 async def npro_action(payload: dict = Body(...)):
-    from app.news.pack import build_pack
-    from app.npro import engine
-    action = payload.get("action")
-    content = payload.get("content") or ""
-    if not action or not content:
-        raise HTTPException(400, "action and content required")
-    sid = payload.get("story_id")
-    story = build_pack(int(sid)) if sid is not None else None
+    from app.npro import engine, schemas
+    req = schemas.ActionIn.model_validate(payload)
+    story = _npro_story(req.story_id)
     return await asyncio.get_running_loop().run_in_executor(
-        None, lambda: engine.smart_action(action, content, story,
-                                           payload.get("retrieved") or []))
+        None, lambda: engine.smart_action(req.action, req.content, story,
+                                           req.reports(), req.format, req.topic,
+                                           req.note_dict(), req.triad_dict()))
+
+
+@app.post("/api/npro/trace")
+async def npro_trace(payload: dict = Body(...)):
+    """Where a script's lines came from: each line matched against the reports
+    it was written from. Shown only when someone asks."""
+    from app.npro import engine, schemas
+    req = schemas.TraceIn.model_validate(payload)
+    if not (req.line or req.script or req.record_id):
+        raise HTTPException(400, "line or script required")
+    story = _npro_story(req.story_id)
+    query = f'"{req.line}"' if req.line else "sources"
+    return await asyncio.get_running_loop().run_in_executor(
+        None, lambda: engine.source_answer(query, req.script, story,
+                                           req.reports(), req.topic,
+                                           req.note_dict(), req.triad_dict(),
+                                           req.record_id))
 
 
 @app.post("/api/npro/intelligence")
 async def npro_intelligence(payload: dict = Body(...)):
-    from app.news.pack import build_pack
-    from app.npro import engine
-    sid = payload.get("story_id")
-    story = build_pack(int(sid)) if sid is not None else None
-    topic = (story or {}).get("title") or payload.get("topic") or ""
+    from app.npro import engine, schemas
+    req = schemas.BriefIn.model_validate(payload)
+    story = _npro_story(req.story_id)
+    topic = (story or {}).get("title") or req.topic
     return await asyncio.get_running_loop().run_in_executor(
-        None, lambda: engine.intelligence(topic, story, payload.get("retrieved") or []))
+        None, lambda: engine.intelligence(topic, story, req.reports()))
 
 
 # --------------------------------------------------------------------------
