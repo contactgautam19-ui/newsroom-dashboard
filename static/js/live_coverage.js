@@ -1,8 +1,16 @@
 // "What's on air — by the hour" panel: what each news channel is broadcasting,
 // read from its LIVE stream title (not uploaded clips/articles). Shows only the
-// current hour by default; hour-band buttons load past hours on demand. Flags
+// current hour by default; the hour dropdown loads past hours on demand. Flags
 // channels that are BREAKING a story. Data: /api/live-coverage (fast) +
 // POST /api/live-coverage/refresh (polls the live streams now).
+//
+// Layout rules, set from Gautam's reference (2026-10-23):
+//   · ONE hour control, a dropdown — a row of hour buttons wrapped onto three
+//     lines and was most of the clutter.
+//   · One headline per ROW, never wrapped: time, headline, chevron. A row that
+//     wraps to three lines turns a channel card into a wall of text.
+//   · Each channel is its own card with a coloured rule and a count pill.
+// Never add a source/provenance marker to these rows (Gautam, twice).
 
 const LiveCoverage = (() => {
   let data = null;          // last payload
@@ -15,42 +23,74 @@ const LiveCoverage = (() => {
   };
   const accent = c => CHANNEL_COLORS[c] || '#8C9AB0';
 
-  function itemLine(it) {
-    const tag = it.breaking
-      ? '<span class="shrink-0 px-1.5 py-0.5 rounded bg-red6 text-white text-[9.5px] font-bold tracking-wide">BREAKING</span> '
-      : '';
-    return `<li class="text-[13px] leading-snug flex gap-1.5 items-start">
-      <span class="text-sub">·</span><span>${tag}${esc(it.headline)}</span></li>`;
+  // Airing time in IST, e.g. "6:12 PM". Falls back to nothing rather than a
+  // wrong time if the row predates the `at` field.
+  function clock(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    // en-IN renders "7:41 pm"; the desk writes "7:41 PM".
+    return d.toLocaleTimeString('en-IN', {
+      hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata',
+    }).replace(/ /g, ' ').replace(/\b(am|pm)\b/i, m => m.toUpperCase());
   }
 
-  function channelBlock(c) {
-    const color = accent(c.channel);
-    const brk = c.breaking
-      ? '<span class="px-1.5 py-0.5 rounded bg-red1 text-red8 text-[10px] font-bold">🔴 BREAKING</span>'
+  function itemRow(it) {
+    const time = clock(it.at);
+    const brk = it.breaking
+      ? '<span class="shrink-0 px-1.5 py-[1px] rounded bg-red6 text-white text-[9px] font-bold tracking-wide align-middle mr-1.5">BREAKING</span>'
       : '';
     return `
-      <div class="pl-3 py-1" style="border-left:3px solid ${color}">
-        <div class="flex items-center gap-2 mb-1">
-          <span class="text-[12.5px] font-bold" style="color:${color}">${esc(c.channel)}</span>
-          <span class="text-[11px] text-sub">${c.count} on air</span>
-          ${brk}
-        </div>
-        <ul class="space-y-0.5">${c.items.map(itemLine).join('')}</ul>
-      </div>`;
+      <button type="button" data-h="${esc(it.headline)}" onclick="LiveCoverage.unpack(this.dataset.h)"
+        title="${esc(it.headline)} — open in N-Pro"
+        class="group w-full flex items-center gap-3 px-3.5 py-2.5 text-left border-t border-line hover:bg-paper">
+        <span class="shrink-0 w-[58px] font-mono text-[11.5px] text-sub tabular-nums">${esc(time)}</span>
+        <span class="min-w-0 flex-1 truncate text-[13.5px] leading-snug">${brk}${esc(it.headline)}</span>
+        <span class="shrink-0 text-sub text-[15px] leading-none group-hover:text-ink">&rsaquo;</span>
+      </button>`;
   }
 
-  function hourButtons() {
-    if (!data || !data.hours.length) return '';
-    return `<div class="flex items-center gap-1.5 flex-wrap mb-3">` +
-      data.hours.map(h => {
-        const isNow = h.hour_key === data.current_hour_key;
-        const sel = h.hour_key === selectedKey;
-        const label = isNow ? `● Now · ${esc(h.label)}` : esc(h.label);
-        const brkDot = h.breaking ? '<span class="ml-1 w-1.5 h-1.5 rounded-full bg-red6 inline-block align-middle"></span>' : '';
-        return `<button onclick="LiveCoverage.select('${esc(h.hour_key)}')"
-          class="px-3 py-1.5 rounded-lg text-[12.5px] font-semibold border ${sel ? 'bg-navy text-white border-navy' : 'bg-white text-sub border-line hover:border-ink'}">
-          ${label}${brkDot}</button>`;
-      }).join('') + `</div>`;
+  function channelCard(c) {
+    const color = accent(c.channel);
+    return `
+      <section class="bg-white border border-line rounded-xl overflow-hidden">
+        <header class="flex items-center gap-2.5 px-3.5 py-3">
+          <span class="w-[3px] h-5 rounded-full shrink-0" style="background:${color}"></span>
+          <span class="text-[15px] font-bold truncate" style="color:${color}">${esc(c.channel)}</span>
+          <span class="shrink-0 ml-1 inline-flex items-center gap-1.5 pl-2 pr-2.5 py-0.5 rounded-full bg-paper border border-line">
+            <span class="font-mono text-[12px] font-semibold">${c.count}</span>
+            <span class="text-[11.5px] text-sub">${c.count === 1 ? 'story' : 'stories'}</span>
+          </span>
+          ${c.breaking ? '<span class="ml-auto shrink-0 w-1.5 h-1.5 rounded-full bg-red6"></span>' : ''}
+        </header>
+        ${c.items.map(itemRow).join('')}
+      </section>`;
+  }
+
+  // One control instead of a wrapping row of hour buttons.
+  function hourPicker(hour) {
+    const opts = data.hours.map(h => {
+      const isNow = h.hour_key === data.current_hour_key;
+      const label = `${isNow ? 'NOW · ' : ''}${h.label}${isNow ? '' : ' · ' + h.date}${h.breaking ? ' ●' : ''}`;
+      return `<option value="${esc(h.hour_key)}"${h.hour_key === selectedKey ? ' selected' : ''}>${esc(label)}</option>`;
+    }).join('');
+    return `
+      <div class="flex items-center gap-3 flex-wrap mb-3.5">
+        <div class="relative inline-flex items-center">
+          <span class="absolute left-3 text-sub pointer-events-none text-[13px] leading-none">◷</span>
+          <select onchange="LiveCoverage.select(this.value)" aria-label="Hour to show"
+            class="appearance-none bg-white border border-line rounded-xl pl-8 pr-8 py-2 text-[13.5px] font-semibold text-ink hover:border-ink focus:outline-none focus:border-ink cursor-pointer">
+            ${opts}
+          </select>
+          <span class="absolute right-3 text-sub pointer-events-none text-[11px] leading-none">▾</span>
+        </div>
+        <span class="text-[12.5px] text-sub">
+          ${hour.total} ${hour.total === 1 ? 'story' : 'stories'}
+          <span class="mx-1.5 opacity-50">·</span>
+          ${hour.channels.length} ${hour.channels.length === 1 ? 'channel' : 'channels'}
+          ${hour.breaking ? `<span class="mx-1.5 opacity-50">·</span><span class="text-red6 font-semibold">${hour.breaking} breaking</span>` : ''}
+        </span>
+      </div>`;
   }
 
   function render() {
@@ -66,17 +106,9 @@ const LiveCoverage = (() => {
                        || data.hours[0]).hour_key;
       }
       const hour = data.hours.find(h => h.hour_key === selectedKey);
-      const isNow = hour.hour_key === data.current_hour_key;
-      const heading = `${isNow ? 'On air now' : 'Aired'} · ${esc(hour.label)} <span class="text-sub font-normal">${esc(hour.date)}</span>`;
-      body.innerHTML = hourButtons() + `
-        <div class="border border-line rounded-xl p-3.5">
-          <div class="flex items-center gap-2 mb-2.5">
-            <span class="text-[13.5px] font-bold">${heading}</span>
-            <span class="ml-auto text-[11.5px] text-sub">${hour.total} on air · ${hour.channels.length} ${hour.channels.length === 1 ? 'channel' : 'channels'}${hour.breaking ? ` · <span class="text-red6 font-semibold">${hour.breaking} breaking</span>` : ''}</span>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-2">
-            ${hour.channels.map(channelBlock).join('')}
-          </div>
+      body.innerHTML = hourPicker(hour) + `
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 items-start">
+          ${hour.channels.map(channelCard).join('')}
         </div>`;
     }
     if (label && data && data.generated_at) {
@@ -87,6 +119,13 @@ const LiveCoverage = (() => {
   function select(key) { selectedKey = key; render(); }
 
   function apply(payload) { data = payload; render(); }
+
+  // Same move as the Social Monitor: hand the headline to N-Pro so the desk
+  // can ask what we hold on a story a rival just aired.
+  async function unpack(headline) {
+    await NPro.openStandalone();
+    NPro.ask(`What's the latest on ${headline}`);
+  }
 
   async function load() {
     try {
@@ -125,5 +164,5 @@ const LiveCoverage = (() => {
   load();
   setInterval(autoTick, 5 * 60000);
 
-  return { load, refresh, select, render };
+  return { load, refresh, select, render, unpack };
 })();

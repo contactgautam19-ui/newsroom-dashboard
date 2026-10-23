@@ -56,7 +56,77 @@ const Social = (() => {
       </section>`;
   }
 
+  // ── reading the board ─────────────────────────────────────────────────
+  // A trend list is three different numbers from three different systems, and
+  // none of them says what it is. This explains the units and reads the board
+  // for the desk. Everything here is computed from the scan the page already
+  // has — no extra call, no model, nothing to spend.
+  function stat(n, label, tone) {
+    return `<div class="flex-1 min-w-[88px]">
+      <p class="font-mono text-[22px] leading-none ${tone || 'text-ink'}">${n}</p>
+      <p class="text-[11.5px] text-sub mt-1.5 leading-tight">${label}</p>
+    </div>`;
+  }
+
+  function readout() {
+    const el = $('social-readout');
+    if (!el) return;
+    if (!data || !data.scanned_at) { el.innerHTML = ''; return; }
+
+    const trends = data.trends || {};
+    const scanned = ['google', 'youtube', 'x'].reduce((n, p) => n + ((trends[p] || []).length), 0);
+    const signals = data.signals || [];
+    // The signals list surfaces `newsworthy` AND `unclear`, so counting the
+    // whole list as "newsworthy" would overstate it — most of an Indian trend
+    // list on a quiet hour is bare names the policy cannot judge.
+    const newsy = signals.filter(s => s.verdict === 'newsworthy');
+    const unclear = signals.filter(s => s.verdict === 'unclear');
+    const cross = signals.filter(s => (s.platforms || []).length > 1);
+    const setAside = (data.filtered || []).length;
+    const loudest = ['google', 'youtube'].flatMap(p => trends[p] || [])
+      .filter(t => t.volume).sort((a, b) => b.volume - a.volume)[0];
+
+    // The read, built from what the scan actually found.
+    const lines = [];
+    if (cross.length) {
+      const names = cross.slice(0, 2).map(s => `<span class="text-ink font-medium">${esc(s.keyword)}</span>`).join(' and ');
+      lines.push(`${names} ${cross.length === 1 ? 'is' : 'are'} trending on more than one platform at once. That convergence is the strongest signal on this page: one platform can be a campaign, three at once rarely is.`);
+    } else if (signals.length) {
+      lines.push(`Nothing is trending across more than one platform right now, so treat each column on its own. A single-platform spike is worth a look, not a lead.`);
+    } else {
+      lines.push(`No editorial signal cleared the bar in this scan. A quiet board is a real answer, not a failure.`);
+    }
+    if (unclear.length) {
+      lines.push(`${unclear.length} more ${unclear.length === 1 ? 'is' : 'are'} undecided — usually a bare name or a term the policy cannot place. Those surface anyway, because a name on its own is sometimes the story.`);
+    }
+    if (setAside) {
+      lines.push(`${setAside} ${setAside === 1 ? 'trend was' : 'trends were'} set aside as a campaign, a promotion or entertainment, so they do not crowd the lead list. Nothing is deleted.`);
+    }
+
+    el.innerHTML = `
+      <section class="bg-white border border-line rounded-2xl p-4" aria-label="Reading the board">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="w-1.5 h-1.5 rounded-full bg-accent"></span>
+          <h3 class="text-[13px] font-bold">Reading the board</h3>
+          <span class="text-[11.5px] text-sub ml-auto">${esc(ageLabel(data.scanned_at))}</span>
+        </div>
+        <div class="flex items-start gap-5 flex-wrap mb-3.5">
+          ${stat(scanned, 'trends scanned<br>across three platforms')}
+          ${stat(newsy.length, 'read as news<br>by the policy')}
+          ${stat(cross.length, 'on more than<br>one platform', cross.length ? 'text-accent' : '')}
+          ${stat(setAside, 'set aside as<br>promo or entertainment', 'text-sub')}
+        </div>
+        <p class="text-[12.5px] text-sub leading-relaxed mb-3">${lines.join(' ')}</p>
+        <div class="border-t border-line pt-3 grid grid-cols-1 sm:grid-cols-3 gap-y-2 gap-x-5 text-[11.5px] text-sub leading-snug">
+          <p><span class="text-ink font-medium">Searches</span> — Google's estimate of how many times India searched that term today${loudest && loudest.volume ? `. Today's loudest is ${esc(vol(loudest.volume))}` : ''}.</p>
+          <p><span class="text-ink font-medium">Views</span> — views on the trending YouTube video itself, not on the topic. A big number can be one viral upload.</p>
+          <p><span class="text-ink font-medium">X</span> — rank only. The API gives position in India's trending list and no volume at all, so there is no number to show.</p>
+        </div>
+      </section>`;
+  }
+
   function render() {
+    readout();
     $('social-trends').innerHTML = ['google', 'youtube', 'x'].map(column).join('');
     $('social-status').textContent = data && data.scanned_at ? `Updated ${ageLabel(data.scanned_at)}` : '';
   }

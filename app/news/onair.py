@@ -292,7 +292,7 @@ def onair_hourly(hours_back: int = WINDOW_HOURS) -> dict:
     Only broadcast-evidence rows (source in AIRED_SOURCES) appear: player OCR
     reads and channels' own "we aired this" X posts. Each hour: {label, date,
     hour_key, total, breaking, channels:[{channel, count, breaking,
-    items:[{headline, breaking, via}]}]}. Also returns ``current_hour_key``
+    items:[{headline, breaking, via, at}]}]}. Also returns ``current_hour_key``
     so the UI can default to the live hour.
     """
     now = datetime.now(timezone.utc)
@@ -329,8 +329,11 @@ def onair_hourly(hours_back: int = WINDOW_HOURS) -> dict:
         items = chans.setdefault(r["channel"], [])
         if _near_duplicate(r["headline"], items):
             continue
+        # `at` is when the read came off the live stream, which for a player
+        # OCR is the airing time to within a cycle. The panel shows it so each
+        # row reads as a log entry rather than a loose pile of headlines.
         items.append({"headline": r["headline"], "breaking": bool(r["breaking"]),
-                      "via": r["source"]})
+                      "via": r["source"], "at": r["first_seen"]})
         if r["breaking"]:
             hour_break[r["hour_key"]] = hour_break.get(r["hour_key"], 0) + 1
 
