@@ -17,9 +17,15 @@ const LiveCoverage = (() => {
   let selectedKey = null;   // hour_key currently shown
   let autoTriggered = false;
 
+  // Channel colours say WHO aired it, never what state it is in. They are
+  // deliberately lower-chroma than the semantic set (breaking red #F04452,
+  // AI blue #438CFF, live green #22C58B): at full saturation NDTV's red read
+  // as "breaking" and India Today's blue read as "AI generated" on every
+  // card. Identity is carried by the rule and the name; status is carried by
+  // a fill, and only status gets to be saturated.
   const CHANNEL_COLORS = {
-    'NDTV 24x7': '#EC4A4D', 'India Today': '#8FB4E8', 'Times Now': '#A99BFF',
-    'Republic TV': '#F0A93B', 'CNN-News18': '#4CC9B8', 'WION': '#F27DB8',
+    'NDTV 24x7': '#C96E70', 'India Today': '#7C9BC4', 'Times Now': '#9389C4',
+    'Republic TV': '#C49A5E', 'CNN-News18': '#5FA99B', 'WION': '#C48BA6',
   };
   const accent = c => CHANNEL_COLORS[c] || '#8C9AB0';
 

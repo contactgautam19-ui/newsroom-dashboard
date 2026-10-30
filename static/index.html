@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#05080F">
+<meta name="theme-color" content="#080B12">
 <title>Echo — newsroom intelligence</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2305080F'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23E5383B'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23E5383B' stroke-opacity='.45' stroke-width='1.5'/%3E%3C/svg%3E">
 <script src="https://cdn.tailwindcss.com"></script>
@@ -13,14 +13,28 @@
 // (breaking / developing / verified) and source categories — never decoration.
 tailwind.config = { theme: { extend: {
   colors: {
-    paper: '#131C2B', ink: '#EEF1F6', sub: '#8C9AB0', line: '#1B2636',
-    navy: '#0E1624', navy2: '#16202F', navyline: '#1B2636',
-    brand: '#E5383B', accent: '#8FB4E8',
-    red1: '#2A1216', red6: '#EC4A4D', red8: '#FF9A9A',
-    amber1: '#2A2010', amber6: '#F0A93B', amber8: '#F6C777',
-    green1: '#0F2A20', green6: '#34C38A', green8: '#7BE0B4',
-    blue1: '#101E36', blue6: '#8FB4E8', blue8: '#B7D0F5',
-    purple6: '#A99BFF', teal6: '#4CC9B8', pink6: '#F27DB8',
+    // SURFACES — the ladder. Four steps, in order of elevation. Before this
+    // there were two, which is why nothing on screen could out-rank anything.
+    bg: '#080B12',        // the page itself
+    paper: '#111827',     // rails, headers, blocks recessed inside a card
+    card: '#172235',      // elevated cards
+    cardhi: '#1D2B41',    // hover / selected
+    line: '#263449',
+    navy: '#111827', navy2: '#1D2B41', navyline: '#263449',
+    // TEXT
+    ink: '#F4F6FA', sub: '#A5B2C5', muted: '#75849A',
+    // SEMANTIC — one job each. amber = editorial attention / needs checking,
+    // blue = AI generated, green = verified / live / approved, red = breaking.
+    brand: '#E5383B', accent: '#438CFF',
+    red1: '#2A1017', red6: '#F04452', red8: '#FF8E97',
+    amber1: '#2A2110', amber6: '#F5B82E', amber8: '#F7CE6B',
+    green1: '#0C2A20', green6: '#22C58B', green8: '#6FE0B6',
+    blue1: '#0E1E38', blue6: '#438CFF', blue8: '#8FB8FF',
+    // IDENTITY — who, never what state. Deliberately lower chroma than the
+    // semantic set so a channel's own colour can never read as "breaking"
+    // or "AI generated". Identity is carried by the rule and the name;
+    // status is carried by a fill. Only status gets to be saturated.
+    purple6: '#9389C4', teal6: '#5FA99B', pink6: '#C48BA6',
   },
   fontFamily: { sans: ['Geist', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'] },
 }}}
@@ -29,23 +43,42 @@ tailwind.config = { theme: { extend: {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;1,6..72,400&display=swap" rel="stylesheet">
 <style>
-  :root { --abyss: #05080F; --deep: #0A101B; --panel: #0E1624; --line: #1B2636; --line-2: #2A384D;
-          --ink: #EEF1F6; --ink-2: #B3BFD0; --ink-3: #8C9AB0; --signal: #E5383B;
+  :root { /* surfaces, in elevation order */
+          --bg: #080B12; --panel: #111827; --card: #172235; --card-hi: #1D2B41;
+          --line: #263449; --line-2: #33425A;
+          /* text */
+          --ink: #F4F6FA; --ink-2: #A5B2C5; --ink-3: #75849A;
+          /* semantic accents: one job each, never decoration */
+          --amber: #F5B82E; --blue: #438CFF; --green: #22C58B; --red: #F04452;
+          --signal: #E5383B;
+          /* kept so older rules and the landing page keep resolving */
+          --abyss: #080B12; --deep: #0B1018;
           --f-display: "Newsreader", "Iowan Old Style", Georgia, serif;
           --f-mono: "Geist Mono", ui-monospace, Menlo, Consolas, monospace; }
   html { color-scheme: dark; }
-  body { background: var(--abyss) !important; color: var(--ink); font-family: Geist, ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { background: var(--bg) !important; color: var(--ink); font-family: Geist, ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
   ::selection { background: rgba(229, 56, 59, .35); }
 
-  /* surfaces: one panel tone on the ink base, hairlines instead of shadows */
-  .bg-white { background-color: var(--panel) !important; }
-  header.sticky { background: rgba(5, 8, 15, .84) !important; backdrop-filter: blur(14px); }
-  #sidebar { background: var(--abyss) !important; border-right: 1px solid var(--line); }
-  #npro { background: var(--abyss) !important; }
-  #npro aside { border-right: 1px solid var(--line); background: var(--abyss) !important; }
+  /* SURFACES — four steps, hairlines instead of shadows. The sidebar used to
+     be the same colour as the page behind it, so the app read as one flat
+     sheet; it now sits one step up, and cards sit a step above that. */
+  .bg-white { background-color: var(--card) !important; }
+  /* A block nested inside a card recedes one step. Scoped to non-interactive
+     elements on purpose: `bg-navy` is also the primary button fill, and
+     catching those repainted every button inside a card panel-dark while it
+     kept its dark text. Surfaces recede; controls do not. */
+  .bg-white .bg-paper:not(button):not(a):not(select):not(input) { background-color: var(--panel) !important; }
+  header.sticky { background: rgba(17, 24, 39, .86) !important; backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+  #sidebar { background: var(--panel) !important; border-right: 1px solid var(--line); }
+  #npro { background: var(--bg) !important; }
+  #npro aside { border-right: 1px solid var(--line); background: var(--panel) !important; }
+  .border-line { border-color: var(--line) !important; }
   .shadow-lg { box-shadow: 0 18px 50px rgba(0, 0, 0, .55) !important; }
+
+  /* hover is the fourth step, and only where a card is actually interactive */
+  article.bg-white:hover, .bg-white[onclick]:hover, button.bg-white:hover { background-color: var(--card-hi) !important; }
 
   /* type: serif for headlines, mono for small labels, Geist for everything else */
   h1, h2, h3 { font-family: var(--f-display); font-weight: 400 !important; letter-spacing: -.02em; }

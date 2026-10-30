@@ -5,12 +5,16 @@
 const Social = (() => {
   // one box per platform: its own header (mark, name, what the list means),
   // a column-title row, then the ranked list
+  // Same rule as the channel colours: platform colour says WHOSE list this
+  // is, not what state anything is in. Kept recognisable (Google blue,
+  // YouTube red) but below the chroma of the semantic set, so a column
+  // header cannot be mistaken for "AI generated" or "breaking".
   const PLATFORM = {
-    google:  { label: 'Google Search', sub: 'What India is searching', unit: 'Searches', color: '#8FB4E8',
+    google:  { label: 'Google Search', sub: 'What India is searching', unit: 'Searches', color: '#7C9BC4',
                mark: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>' },
-    youtube: { label: 'YouTube', sub: 'What India is watching', unit: 'Views', color: '#EC4A4D',
+    youtube: { label: 'YouTube', sub: 'What India is watching', unit: 'Views', color: '#C96E70',
                mark: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>' },
-    x:       { label: 'X', sub: 'What India is posting', unit: '', color: '#EEF1F6',
+    x:       { label: 'X', sub: 'What India is posting', unit: '', color: '#C7D0DC',
                mark: '<span class="text-[15px] font-bold leading-none">𝕏</span>' },
   };
   let data = null;
@@ -111,10 +115,13 @@ const Social = (() => {
           <span class="text-[11.5px] text-sub ml-auto">${esc(ageLabel(data.scanned_at))}</span>
         </div>
         <div class="flex items-start gap-5 flex-wrap mb-3.5">
+          ${/* colour follows the semantic rule: amber = editorial attention,
+                green = the strongest signal a desk can get, muted = noise
+                that has been handled. A zero never gets a colour. */''}
           ${stat(scanned, 'trends scanned<br>across three platforms')}
-          ${stat(newsy.length, 'read as news<br>by the policy')}
-          ${stat(cross.length, 'on more than<br>one platform', cross.length ? 'text-accent' : '')}
-          ${stat(setAside, 'set aside as<br>promo or entertainment', 'text-sub')}
+          ${stat(newsy.length, 'read as news<br>by the policy', newsy.length ? 'text-amber6' : 'text-muted')}
+          ${stat(cross.length, 'on more than<br>one platform', cross.length ? 'text-green6' : 'text-muted')}
+          ${stat(setAside, 'set aside as<br>promo or entertainment', 'text-muted')}
         </div>
         <p class="text-[12.5px] text-sub leading-relaxed mb-3">${lines.join(' ')}</p>
         <div class="border-t border-line pt-3 grid grid-cols-1 sm:grid-cols-3 gap-y-2 gap-x-5 text-[11.5px] text-sub leading-snug">
