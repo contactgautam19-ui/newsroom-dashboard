@@ -100,6 +100,36 @@ tailwind.config = { theme: { extend: {
   input::placeholder, textarea::placeholder { color: #5E6B80; }
   code { font-family: var(--f-mono); font-size: .92em; color: var(--ink-2); }
 
+  /* ── generated output vs editorial input ──────────────────────────────
+     A script is the one place where "where did this come from" has to be
+     legible at a glance. The container is edged in AI blue and its sections
+     are separated rather than run together. Producer notes get their own
+     amber container: unconfirmed material must never be set in the same type
+     as copy an anchor is about to read on air. */
+  .gen { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--blue); border-radius: 14px; overflow: hidden; }
+  .gen-bar { display: flex; align-items: center; gap: 10px; padding: 11px 15px; background: rgba(67,140,255,.07); border-bottom: 1px solid var(--line); }
+  .gen-badge { font-family: var(--f-mono); font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; padding: 4px 9px; border-radius: 5px; background: rgba(245,184,46,.15); color: var(--amber); }
+  .gen-badge.ok { background: rgba(34,197,139,.15); color: var(--green); }
+  .gen-src { margin-left: auto; font-size: 11.5px; color: var(--ink-3); }
+  .gen-sec { padding: 15px; }
+  .gen-sec + .gen-sec { border-top: 1px solid var(--line); }
+  .gen-lab { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+  .gen-lab b { font-family: var(--f-mono); font-size: 10px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--blue); }
+  .gen-lab i { height: 1px; flex: 1; background: var(--line); }
+  .gen-lab em { font-style: normal; font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); white-space: nowrap; }
+  .gen-read { font-size: 15px; line-height: 1.7; color: var(--ink); white-space: pre-wrap; }
+  .gen-prose { font-size: 13.5px; line-height: 1.65; color: var(--ink-2); white-space: pre-wrap; }
+  .gen-hl { display: flex; align-items: center; gap: 10px; padding: 8px 11px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); margin-bottom: 7px; }
+  .gen-hl:last-child { margin-bottom: 0; }
+  .gen-hl p { flex: 1; font-size: 14px; line-height: 1.35; color: var(--ink); }
+  .gen-hl u { text-decoration: none; font-family: var(--f-mono); font-size: 10px; color: var(--ink-3); }
+  .gen-hl button { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); border: 1px solid var(--line); border-radius: 5px !important; padding: 3.5px 7px; background: transparent; }
+  .gen-hl button:hover { color: var(--ink); border-color: var(--ink-3); }
+  .gen-note { margin: 0 15px 15px; background: rgba(245,184,46,.07); border: 1px solid rgba(245,184,46,.38); border-left: 3px solid var(--amber); border-radius: 11px; padding: 11px 13px; }
+  .gen-note b { display: block; font-family: var(--f-mono); font-size: 9.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--amber); margin-bottom: 5px; }
+  .gen-note p { font-size: 12.5px; line-height: 1.6; color: var(--ink-2); white-space: pre-wrap; }
+  .gen-note p + p { margin-top: 6px; }
+
   /* sidebar */
   .navlink { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border-radius: 10px; font-size: 14px; font-weight: 500; color: var(--ink-3); transition: background .15s, color .15s; }
   .navlink:hover { background: var(--panel); color: var(--ink); }

@@ -59,17 +59,17 @@ const NPro = (() => {
   }
 
   // ── message primitives ─────────────────────────────────────────────────────
-  function bubble(side, inner) {
+  function bubble(side, inner, bare) {
     const wrap = document.createElement('div');
     wrap.className = 'fade-up flex ' + (side === 'user' ? 'justify-end' : 'justify-start');
     wrap.innerHTML = side === 'user'
       ? `<div class="max-w-[85%] bg-paper text-ink border border-line rounded-2xl rounded-br-sm px-4 py-2.5 text-[14px]">${inner}</div>`
-      : `<div class="max-w-[92%] w-full"><div class="flex items-center gap-2 mb-1"><span class="w-5 h-5 rounded bg-brand text-white text-[10px] font-extrabold flex items-center justify-center">N</span><span class="text-[11.5px] font-semibold text-sub">N-Pro</span></div><div class="bg-white border border-line rounded-2xl rounded-tl-sm px-4 py-3 text-[14px] leading-relaxed">${inner}</div></div>`;
+      : `<div class="max-w-[92%] w-full"><div class="flex items-center gap-2 mb-1"><span class="w-5 h-5 rounded bg-brand text-white text-[10px] font-extrabold flex items-center justify-center">N</span><span class="text-[11.5px] font-semibold text-sub">N-Pro</span></div>${bare ? inner : `<div class="bg-white border border-line rounded-2xl rounded-tl-sm px-4 py-3 text-[14px] leading-relaxed">${inner}</div>`}</div>`;
     thread().appendChild(wrap);
     scrollDown();
     return wrap;
   }
-  function msgAI(html) { clearTyping(); return bubble('ai', html); }
+  function msgAI(html, bare) { clearTyping(); return bubble('ai', html, bare); }
   function msgUser(text) { return bubble('user', esc(text)); }
 
   // Markdown-lite renderer: **bold** headers, "- " bullets, paragraph spacing.
@@ -418,35 +418,130 @@ const NPro = (() => {
       <span class="text-sub"> · ${c.lines.map(esc).join(' ')}</span></div>`;
   }
 
-  // Producer notes sit apart from the copy, so nothing here is read on air.
-  function notesBox(notes) {
-    if (!notes || !notes.length) return '';
-    return `<div class="mt-3 border border-line rounded-xl px-3.5 py-2.5 bg-paper">
-      <p class="text-[10.5px] font-bold uppercase tracking-widest text-amber6 mb-1.5">For the producer · not for air</p>
-      <ul class="space-y-1 text-[12.5px]">${notes.map(n => `<li class="flex gap-2"><span class="text-sub shrink-0">•</span><span>${esc(n)}</span></li>`).join('')}</ul></div>`;
+  // ── script rendering ───────────────────────────────────────────────────
+  // The engine writes the house format: ALLCAPS section labels, one per block
+  // (HEADLINES, ANCHOR READ, WHY THIS MATTERS, PRODUCER NOTES ...). Rendering
+  // that as a single pre-wrap blob made three different kinds of content look
+  // identical and, worse, set unconfirmed producer notes in the same type as
+  // copy the anchor reads on air. Split it into real sections.
+  const LABEL_RE = /^([A-Z][A-Z0-9 ,'\u2019\-\/&()]{2,}):[ \t]*(.*)$/;
+  // The trailing number matters: the package format emits VO 1 / VO 2 / VO 3,
+  // and those are read on air. Without it they fell through to the muted
+  // context style, which is the opposite of what they are.
+  const READ_RE = /^(ANCHOR READ|ANCHOR INTRO|SCRIPT|READER|VO|VOICE ?OVER|REPORTER|PACKAGE|PIECE TO CAMERA|PTC)(\s*\d+)?$/i;
+  const NOTES_RE = /^PRODUCER NOTES?$/i;
+  // A model will sometimes ignore the PRODUCER NOTES label and write the note
+  // inline instead. A note that reads like copy is the hazard, wherever it
+  // came from, so catch that phrasing too.
+  const STRAY_NOTE_RE = /(?:^|\n)[ \t]*(?:note to (?:the )?producer|producer note|note for the producer)[ \t]*:[ \t]*/i;
+
+  function parseScript(text) {
+    const out = [];
+    let cur = null;
+    for (const raw of String(text || '').split('\n')) {
+      const line = raw.replace(/\s+$/, '');
+      const m = line.match(LABEL_RE);
+      if (m) {
+        cur = { label: m[1].trim(), lines: m[2].trim() ? [m[2].trim()] : [] };
+        out.push(cur);
+      } else if (cur) {
+        cur.lines.push(line);
+      } else if (line.trim()) {
+        cur = { label: '', lines: [line] };
+        out.push(cur);
+      }
+    }
+    return out.map(x => ({ label: x.label, body: x.lines.join('\n').trim() }));
+  }
+
+  // Pull every producer note out of the body, whether it was labelled or not.
+  function liftNotes(sections) {
+    const notes = [];
+    for (const sec of sections) {
+      if (NOTES_RE.test(sec.label)) { if (sec.body) notes.push(sec.body); sec.body = ''; continue; }
+      const m = STRAY_NOTE_RE.exec(sec.body);
+      if (m) {
+        notes.push(sec.body.slice(m.index + m[0].length).trim());
+        sec.body = sec.body.slice(0, m.index).trim();
+      }
+    }
+    return notes;
+  }
+
+  const words = t => (t.trim().match(/\S+/g) || []).length;
+  // Broadcast read pace, ~175 words a minute. Shown so a 20-second slug that
+  // actually runs 40 is visible before it reaches an anchor.
+  const readSecs = t => Math.max(1, Math.round(words(t) / 2.9));
+
+  function headlineRows(body) {
+    const lines = body.split('\n').map(l => l.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s*/, '').trim()).filter(Boolean);
+    if (!lines.length) return '';
+    return lines.map(h => `<div class="gen-hl">
+      <p>${esc(h)}</p><u>${h.length}</u>
+      <button type="button" data-hl="${esc(h)}" onclick="NPro.copyBit(this)">Copy</button></div>`).join('');
+  }
+
+  function sectionHTML(sec) {
+    const isRead = READ_RE.test(sec.label);
+    const isHl = /^HEADLINES?$/i.test(sec.label);
+    let meta = '';
+    if (isRead) meta = `${words(sec.body)} words \u00b7 ~${readSecs(sec.body)} sec`;
+    else if (isHl) { const n = sec.body.split('\n').filter(l => l.trim()).length; meta = `${n} option${n === 1 ? '' : 's'}`; }
+    const label = sec.label || 'Script';
+    return `<div class="gen-sec">
+      <div class="gen-lab"><b>${esc(label)}</b><i></i>${meta ? `<em>${esc(meta)}</em>` : ''}</div>
+      ${isHl ? headlineRows(sec.body)
+             : `<div class="${isRead ? 'gen-read' : 'gen-prose'}">${fmtInline(sec.body)}</div>`}
+    </div>`;
+  }
+
+  function notesHTML(notes) {
+    if (!notes.length) return '';
+    const paras = notes.join('\n').split('\n').map(l => l.replace(/^\s*[-*\u2022]\s*/, '').trim()).filter(Boolean);
+    return `<div class="gen-note"><b>For the producer \u00b7 do not read on air</b>
+      ${paras.map(t => `<p>${esc(t)}</p>`).join('')}</div>`;
   }
 
   function renderScript(script, model, notes, checks, recordId) {
+    const sections = parseScript(script);
+    const lifted = liftNotes(sections);
+    const allNotes = (notes || []).concat(lifted).filter(Boolean);
+    const body = sections.filter(s => s.body).map(sectionHTML).join('');
+
     const badge = model === 'mock'
-      ? '<span class="bg-blue1 text-blue8 text-[10px] font-bold px-2 py-0.5 rounded">TEMPLATE</span>'
-      : '<span class="bg-amber1 text-amber8 text-[10px] font-bold px-2 py-0.5 rounded">AI DRAFT — REVIEW</span>';
+      ? '<span class="gen-badge ok">Template</span>'
+      : '<span class="gen-badge">AI draft \u00b7 review</span>';
     const chips = (meta?.actions || []).map(a =>
       `<button onclick="NPro.action('${a.id}', this)" class="px-2.5 py-1 rounded-lg text-[12px] font-medium border border-line bg-white hover:border-ink">${esc(a.label)}</button>`).join('');
+
     const w = msgAI(`
-      <div class="flex items-center gap-2 mb-2">${badge}
-        <button onclick="NPro.copyLast(this)" class="ml-auto text-[12px] text-accent font-semibold hover:underline">Copy script</button></div>
-      <div class="npro-script text-[13.5px]" style="white-space:pre-wrap">${fmtScript(script)}</div>
-      ${notesBox(notes)}${checksLine(checks)}
-      ${recordId ? `<p class="mt-1.5 text-[11px] text-sub">Filed in the notebook with its evidence · record ${esc(recordId)}</p>` : ''}
-      <div class="mt-3 pt-3 border-t border-line">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2.5">
-          <button onclick="NPro.moreContext(this)" class="flex items-center justify-center gap-2 bg-accent text-white rounded-xl px-4 py-2.5 text-[13px] font-semibold hover:opacity-90">Get more context</button>
-          <button onclick="NPro.showSourcing(this)" class="flex items-center justify-center gap-2 border border-line rounded-xl px-4 py-2.5 text-[13px] font-semibold hover:border-ink">Show sourcing</button>
-        </div>
-        <div class="flex flex-wrap gap-1.5">${chips}</div>
-      </div>`);
+      <div class="gen">
+        <div class="gen-bar">${badge}<span class="gen-src">Editorial Intelligence Engine</span></div>
+        ${body}
+        ${notesHTML(allNotes)}
+      </div>
+      ${checksLine(checks)}
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+        <button onclick="NPro.copyLast(this)" class="bg-navy text-white rounded-xl px-4 py-2.5 text-[13px] font-semibold">Copy script</button>
+        <button onclick="NPro.showSourcing(this)" class="border border-line rounded-xl px-4 py-2.5 text-[13px] font-semibold hover:border-ink">Show sourcing</button>
+      </div>
+      <button onclick="NPro.moreContext(this)" class="w-full mt-2 border border-line rounded-xl px-4 py-2.5 text-[13px] font-semibold hover:border-ink">Get more context</button>
+      ${chips ? `<details class="mt-2.5"><summary class="cursor-pointer text-[12px] text-sub hover:text-ink select-none">Rewrite and repurpose \u25be</summary>
+        <div class="flex flex-wrap gap-1.5 mt-2">${chips}</div></details>` : ''}
+      ${recordId ? `<p class="mt-2.5 text-[11px] text-sub">Filed in the notebook with its evidence \u00b7 record ${esc(recordId)}</p>` : ''}`, true);
     w.dataset.script = script;
     w.dataset.record = recordId || '';
+  }
+
+  // Copy one headline on its own. An anchor wants the line, not the document.
+  function copyBit(btn) {
+    navigator.clipboard.writeText(btn.dataset.hl || '');
+    const p = btn.textContent; btn.textContent = 'Copied';
+    setTimeout(() => { btn.textContent = p; }, 1400);
+  }
+
+  function fmtInline(text) {
+    return esc(text).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
   }
 
   function fmtScript(text) {
@@ -862,5 +957,5 @@ const NPro = (() => {
 
   return { open, openStandalone, close, toggleIntel, pickFormat, answer, answerEl,
            answerText, showCustom, toggleMulti, finishMulti, addGuest, finishGuests,
-           action, moreContext, showSourcing, copyLast, ask, pickSuggest, openRecord, takeNote };
+           action, moreContext, showSourcing, copyLast, copyBit, ask, pickSuggest, openRecord, takeNote };
 })();
