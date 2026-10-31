@@ -273,6 +273,15 @@ def run_fast_scan(promote: bool = True) -> dict:
     for sig in raised:
         events.publish("fast_signal", sig)
 
+    # Standing searches ride the same cadence as the breaking watch: a story
+    # an editor asked to follow should update as often as the board does.
+    try:
+        from app.news import tracker
+        stats["tracking"] = tracker.check_all()
+    except Exception as exc:          # tracking must never cost us a scan
+        log.warning("tracked-story check failed: %s", exc)
+        stats["tracking"] = {"error": str(exc)}
+
     result = {"ok": True, "at": now_iso, "raised": len(raised),
               "promoted": len(promoted), "promotions": promoted,
               "top": sorted(raised, key=lambda s: -s["urgency"])[:5], **stats}

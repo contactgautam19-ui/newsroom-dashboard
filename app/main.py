@@ -91,7 +91,7 @@ _AUTH_EXEMPT_PREFIXES = ("/login", "/api/login", "/static/", "/api/cron/", "/gue
 # are open; the paid ones are metered per guest — see guest.QUOTAS.
 _GUEST_POST_ALLOW = ("/api/guest/", "/api/ingest", "/api/alerts/scan",
                      "/api/live-coverage/refresh", "/api/x/refresh", "/api/npro/",
-                     "/api/hyper/scan")
+                     "/api/hyper/scan", "/api/track")
 # the notebook holds the newsroom's own notes and scripts: not for demo guests
 _GUEST_BLOCK = ("/api/settings", "/api/sim/", "/api/guests", "/api/npro/records")
 # metered guest POSTs: path prefix -> quota kind. Context and the intelligence
@@ -527,6 +527,61 @@ async def alerts_scan():
     result = await asyncio.get_running_loop().run_in_executor(None, _scan)
     return {"scanned": True, "last_scan": now.isoformat(),
             "next_in": ALERT_SCAN_MIN_SECONDS, **result}
+
+
+# ── story tracking ────────────────────────────────────────────────────────
+# Following one running story across the day it develops, which is a
+# different job from ranking the last hour. See app/news/tracker.py.
+
+@app.get("/api/track")
+def track_list():
+    from app.news import tracker
+    return tracker.list_all()
+
+
+@app.post("/api/track")
+def track_start(request: Request, payload: dict = Body(...)):
+    from app.news import tracker
+    g = getattr(request.state, "guest", None)
+    try:
+        return tracker.start(
+            label=payload.get("label", ""),
+            query=payload.get("query", ""),
+            story_id=payload.get("story_id"),
+            created_by=(g["email"] if g else "editor"),
+        )
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+
+@app.get("/api/track/{tracked_id}")
+def track_get(tracked_id: int):
+    from app.news import tracker
+    track = tracker.get(tracked_id)
+    if not track:
+        raise HTTPException(404, "No such tracked story")
+    return track
+
+
+@app.post("/api/track/{tracked_id}/check")
+async def track_check(tracked_id: int):
+    """Look for developments now, rather than waiting for the next scan."""
+    from app.news import tracker
+    return await asyncio.get_running_loop().run_in_executor(
+        None, lambda: tracker.check_one(tracked_id))
+
+
+@app.post("/api/track/{tracked_id}/seen")
+def track_seen(tracked_id: int):
+    from app.news import tracker
+    tracker.mark_seen(tracked_id)
+    return {"ok": True}
+
+
+@app.delete("/api/track/{tracked_id}")
+def track_stop(tracked_id: int):
+    from app.news import tracker
+    return {"ok": tracker.stop(tracked_id)}
 
 
 @app.get("/api/velocity")

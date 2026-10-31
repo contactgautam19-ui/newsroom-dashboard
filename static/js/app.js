@@ -218,6 +218,12 @@ window.addEventListener('DOMContentLoaded', () => {
   else Nav.go('stories');
   autoRefreshOnOpen();
   applyRole();
+  // Tracked stories update on the scan cadence, so the panel re-reads on a
+  // slow loop rather than only at load — an editor leaves this tab open.
+  try {
+    Track.load();
+    setInterval(() => { if (document.visibilityState === 'visible') Track.load(); }, 90000);
+  } catch { /* panel is optional */ }
 });
 
 // Guests (emailed-code sessions) get a demo view: the Ops desk is hidden, the

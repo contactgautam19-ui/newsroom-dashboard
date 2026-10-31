@@ -152,6 +152,41 @@ CREATE TABLE IF NOT EXISTS live_onair (
     source TEXT NOT NULL DEFAULT 'title'       -- ocr | x | title | web
 );
 
+-- Story tracking: a running story an editor has asked to be followed, and
+-- every development found on it since. Separate from `stories` because the
+-- board answers "what should we lead with in the last hour" and retires
+-- aggressively, while a tracked story is deliberately followed across the
+-- whole day it takes to develop.
+CREATE TABLE IF NOT EXISTS tracked_stories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT NOT NULL,                       -- what the editor sees
+    query TEXT NOT NULL,                       -- what gets searched
+    story_id INTEGER,                          -- board story it came from, if any
+    created_at TEXT NOT NULL,
+    created_by TEXT NOT NULL DEFAULT 'editor',
+    last_checked_at TEXT,
+    last_update_at TEXT,                       -- newest development found
+    updates_count INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS tracked_updates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tracked_id INTEGER NOT NULL,
+    dedup_key TEXT NOT NULL,                   -- hash(tracked_id|normalised title)
+    title TEXT NOT NULL,
+    url TEXT,
+    publisher TEXT,
+    published_at TEXT,
+    first_seen TEXT NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'update',       -- permission | security | traffic | reaction | ...
+    seen INTEGER NOT NULL DEFAULT 0,           -- has the editor looked at it
+    UNIQUE (tracked_id, dedup_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tracked_updates_story
+    ON tracked_updates (tracked_id, published_at);
+
 -- Breaking-news fast lane: candidates spotted by the cheap scan, which runs
 -- far more often than the full ranking cycle. A row here means "an editor
 -- should know about this now", independent of whether it has reached the

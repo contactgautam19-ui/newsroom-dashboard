@@ -260,10 +260,23 @@ tailwind.config = { theme: { extend: {
           </div>
           <div class="bg-white border border-line rounded-2xl p-5">
             <p class="text-[11.5px] font-semibold tracking-widest text-sub uppercase mb-3">Quick actions</p>
-            <button onclick="StoryDesk.pickTop()" class="w-full mb-2.5 flex items-center justify-center gap-2 bg-navy text-white text-[13.5px] font-semibold rounded-xl px-4 py-3 hover:bg-navy2">＋ Pick a Story</button>
+            <button onclick="Track.openPicker()" class="w-full mb-2.5 flex items-center justify-center gap-2 bg-navy text-white text-[13.5px] font-semibold rounded-xl px-4 py-3 hover:bg-navy2">◎ Track a Story</button>
             <button onclick="StoryDesk.openTopPack()" class="w-full flex items-center justify-center gap-2 border border-line text-[13.5px] font-semibold rounded-xl px-4 py-3 hover:border-ink">🗂 Story Pack Builder</button>
           </div>
         </div>
+
+        <!-- Tracked stories: running stories being followed across the day -->
+        <section id="track-panel" class="hidden bg-white border border-line rounded-2xl p-5 mb-6">
+          <div class="flex items-center gap-3 flex-wrap mb-4">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full" style="background:var(--green)"></span>
+              <h2 class="font-serif text-[21px]">Tracking</h2>
+            </div>
+            <span id="track-meta" class="text-[12.5px] text-sub"></span>
+            <button onclick="Track.openPicker()" class="ml-auto text-[12.5px] font-semibold px-3.5 py-1.5 rounded-lg border border-line bg-white hover:border-ink">＋ Track another</button>
+          </div>
+          <div id="track-list" class="grid md:grid-cols-2 xl:grid-cols-3 gap-3"></div>
+        </section>
 
         <!-- What's on air — hourly rival-TV coverage -->
         <section class="bg-white border border-line rounded-2xl p-5 mb-6">
@@ -401,6 +414,11 @@ tailwind.config = { theme: { extend: {
   <div class="max-w-2xl mx-auto my-2 bg-white rounded-2xl border border-line p-5 md:p-6 fade-up" id="pack-content"></div>
 </div>
 
+<!-- Tracked-story picker and timeline -->
+<div id="track-overlay" class="hidden fixed inset-0 z-40 bg-black/70 p-3 md:p-8 overflow-y-auto" onclick="if(event.target===this)Track.closeModal()">
+  <div class="max-w-2xl mx-auto my-2 bg-white rounded-2xl border border-line overflow-hidden fade-up" id="track-content"></div>
+</div>
+
 <!-- N-Pro — AI news-script assistant (full-screen console) -->
 <div id="npro" class="hidden fixed inset-0 z-50 bg-paper">
   <div class="flex h-full">
@@ -457,6 +475,7 @@ tailwind.config = { theme: { extend: {
 
 <script src="/static/js/app.js"></script>
 <script src="/static/js/story_desk.js"></script>
+<script src="/static/js/track.js"></script>
 <script src="/static/js/live_coverage.js"></script>
 <script src="/static/js/npro.js"></script>
 <script src="/static/js/x_desk.js"></script>
