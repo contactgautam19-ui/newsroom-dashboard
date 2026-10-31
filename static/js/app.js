@@ -275,7 +275,17 @@ async function autoRefreshOnOpen() {
     if (isStale) {
       setLive('busy');
       setUpdated('refreshing…');
+      // Say so on the board, not just in the header chip. This is the path a
+      // demo guest lands on, and a cold cycle runs for up to two minutes.
+      try { StoryDesk.building(true); } catch { /* board not mounted yet */ }
       await api('/api/ingest');
+      try {
+        const data = await (await fetch('/api/rundown')).json();
+        StoryDesk.building(false);
+        if (Array.isArray(data)) StoryDesk.render(data);
+        setLive('live');
+        setUpdated('Refreshed just now');
+      } catch { StoryDesk.building(false); }
     }
-  } catch { /* silent — SSE will still deliver data */ }
+  } catch { /* silent — polling will still deliver data */ }
 }

@@ -21,6 +21,58 @@ _norm_re = re.compile(r"[^a-z0-9 ]+")
 
 LAST_STATS: dict = {}  # most recent cycle stats, for the Ops page
 
+# True while a cycle is running inside this process. On serverless each
+# instance has its own copy, so this is a stampede guard for one instance,
+# not a global lock — the staleness check below is what stops the common case
+# of several visitors each kicking off a cycle seconds apart.
+_RUNNING = False
+
+
+def last_cycle_at() -> str | None:
+    """When a cycle last wrote to the database, as an ISO string.
+
+    LAST_STATS lives in memory and dies with the serverless instance, so it
+    reads as "never ingested" on every cold start even when the board was
+    filled minutes ago. The stories table is the durable record.
+    """
+    try:
+        with db.connect() as con:
+            row = con.execute(
+                "SELECT MAX(last_updated_at) m FROM stories WHERE active=1"
+            ).fetchone()
+        return row["m"] if row else None
+    except Exception:
+        return None
+
+
+def warm_if_stale(minutes: int = 10) -> dict:
+    """Run a cycle only if the board is older than `minutes`.
+
+    Called off the request path (a guest asking for a sign-in code) so the
+    time a visitor spends fetching that code from their inbox covers the cold
+    cycle instead of being spent staring at an empty board.
+    """
+    global _RUNNING
+    if _RUNNING:
+        return {"ok": True, "skipped": "already running"}
+    last = last_cycle_at()
+    if last:
+        try:
+            when = datetime.fromisoformat(last)
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            if datetime.now(timezone.utc) - when < timedelta(minutes=minutes):
+                return {"ok": True, "skipped": "board is fresh", "last_ingest": last}
+        except ValueError:
+            pass  # unparseable timestamp: treat as stale and refresh
+    _RUNNING = True
+    try:
+        return run_ingest_cycle(manual=False)
+    except Exception as exc:          # a pre-warm must never surface as an error
+        return {"ok": False, "error": str(exc)}
+    finally:
+        _RUNNING = False
+
 # Non-news recurring content never belongs on an editorial rundown
 _JUNK_TOPIC_RE = re.compile(
     r"lottery|horoscope|panchang|numerolog|astrolog|word of the day|"

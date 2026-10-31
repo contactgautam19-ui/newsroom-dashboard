@@ -20,7 +20,7 @@ import os
 import re
 from contextlib import asynccontextmanager
 
-from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Body, FastAPI, HTTPException, Request
 from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
                                StreamingResponse)
 from fastapi.staticfiles import StaticFiles
@@ -285,13 +285,20 @@ def guest_page():
 
 
 @app.post("/api/guest/request")
-def guest_request(request: Request, payload: dict = Body(...)):
+def guest_request(request: Request, tasks: BackgroundTasks, payload: dict = Body(...)):
     try:
-        return guest.request_code(payload.get("name", ""), payload.get("email", ""),
-                                  payload.get("org", ""), payload.get("source", ""),
-                                  request.headers.get("user-agent", ""))
+        result = guest.request_code(payload.get("name", ""), payload.get("email", ""),
+                                    payload.get("org", ""), payload.get("source", ""),
+                                    request.headers.get("user-agent", ""))
     except guest.GuestError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    # Start the cycle now, not when they land. A visitor spends 30–120 seconds
+    # fetching this code from their inbox; a cold cycle takes about the same.
+    # Spending the two in parallel is the difference between a demo that opens
+    # on a full board and one that opens on a spinner. Skips itself if the
+    # board is already fresh.
+    tasks.add_task(ingest.warm_if_stale, 10)
+    return result
 
 
 @app.post("/api/guest/verify")
@@ -986,8 +993,18 @@ def ops_summary():
             "SELECT handle, text, discard_reason, created_at FROM tweets "
             "WHERE discarded=1 ORDER BY created_at DESC LIMIT 8").fetchall())
         handles_count = con.execute("SELECT COUNT(*) c FROM handles").fetchone()["c"]
+    # The board's open-time staleness check reads last_ingest. LAST_STATS is
+    # in-memory, so on a cold serverless instance it is empty and every first
+    # visitor would pay for a full cycle even when the database was written
+    # minutes ago. Fall back to what the stories table actually says.
+    last_stats = dict(ingest.LAST_STATS)
+    if not last_stats.get("last_ingest"):
+        from_db = ingest.last_cycle_at()
+        if from_db:
+            last_stats["last_ingest"] = from_db
+            last_stats["source"] = "database"
     return {
-        "last_ingest": ingest.LAST_STATS,
+        "last_ingest": last_stats,
         "news_refresh_minutes": scheduler.get_news_interval(),
         "email_enabled": config.EMAIL_ENABLED,
         "briefs_today": briefs_today,

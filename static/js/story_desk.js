@@ -151,6 +151,61 @@ const StoryDesk = (() => {
       </div>`;
   }
 
+  // ── first-cycle loading state ──────────────────────────────────────────
+  // A demo guest has a short window, and a cold board used to show one flat
+  // line that read like a dead end while a ~2 minute ingest ran unseen.
+  // There is no honest per-stage progress to poll here: events are published
+  // in-memory and /api/stream 404s on serverless, so nothing survives between
+  // requests. So this reports only what is actually knowable — what the system
+  // is doing, how long it usually takes, and how long THIS run has been going.
+  // No invented progress bar.
+  let buildStart = 0, buildTimer = null;
+
+  function elapsedLabel() {
+    const s = Math.max(0, Math.round((Date.now() - buildStart) / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function paintBuilding(el) {
+    el.innerHTML = `
+      <div data-building class="bg-white border border-line rounded-2xl px-6 py-10 text-center">
+        <div class="flex items-center justify-center gap-2.5 mb-3.5">
+          <span class="w-2 h-2 rounded-full inline-block" style="background:var(--blue);animation:flashPulse 1.2s infinite"></span>
+          <p class="text-[17px] font-semibold text-ink">Building your board</p>
+        </div>
+        <p class="text-[13.5px] text-sub leading-relaxed max-w-[540px] mx-auto">
+          Echo is reading the last hour of Indian news across fifty sources, putting
+          reports that cover the same event together, and ranking what matters most
+          for an Indian newsroom right now.
+        </p>
+        <p class="text-[13.5px] text-sub leading-relaxed max-w-[540px] mx-auto mt-2.5">
+          The first run takes up to about two minutes. After that it is a few seconds.
+          Stories appear here on their own, so there is nothing to click.
+        </p>
+        <p class="mt-5 font-mono text-[11.5px] text-muted" data-elapsed>Working for ${elapsedLabel()}</p>
+      </div>`;
+    if (buildTimer) clearInterval(buildTimer);
+    buildTimer = setInterval(() => {
+      const t = el.querySelector('[data-elapsed]');
+      if (!t || !buildStart) { clearInterval(buildTimer); buildTimer = null; return; }
+      t.textContent = `Working for ${elapsedLabel()}`;
+    }, 1000);
+  }
+
+  // Called by anything that kicks off a cycle, so the board can say so.
+  function building(on) {
+    if (on) {
+      if (!buildStart) buildStart = Date.now();
+      const el = document.getElementById('story-list');
+      // Only take over an empty board. A guest who already has stories keeps
+      // reading them while the next cycle runs underneath.
+      if (el && !el.querySelector('article')) paintBuilding(el);
+    } else {
+      buildStart = 0;
+      if (buildTimer) { clearInterval(buildTimer); buildTimer = null; }
+    }
+  }
+
   function renderInsight(active) {
     const el = document.getElementById('insight-text');
     if (!el) return;
@@ -159,7 +214,12 @@ const StoryDesk = (() => {
     const trending = active.filter(s => s.trend_boost > 0).length;
     const live = active.filter(isLive).length;
     let msg;
-    if (!active.length) { el.textContent = 'No stories in the last hour yet — the board refills on the next refresh.'; return; }
+    if (!active.length) {
+      el.textContent = buildStart
+        ? 'Reading the last hour of Indian news. The board fills in by itself.'
+        : 'Nothing broke in the last hour. The board only shows this hour, so a quiet patch looks empty.';
+      return;
+    }
     if (breaking) msg = `${breaking} breaking ${breaking === 1 ? 'story' : 'stories'} on the board right now.`;
     else if (live === active.length) msg = `All ${live} stories on the board broke within the last hour.`;
     else msg = `${live} of ${active.length} stories broke within the last hour; the other ${active.length - live} ${active.length - live === 1 ? 'is a new article on an older story' : 'are new articles on older stories'}.`;
@@ -184,6 +244,9 @@ const StoryDesk = (() => {
 
   function render(data) {
     if (data) stories = data;
+    // Stories arriving by any route — polling, SSE, the open-time refresh —
+    // ends the build, so the card can never outlive the cycle it describes.
+    if (data && data.length) building(false);
     renderFilters();
     const active = stories.filter(s => !s.picked);
     let view;
@@ -203,7 +266,14 @@ const StoryDesk = (() => {
     if (countEl) countEl.textContent = view.length;
     const el = document.getElementById('story-list');
     if (!view.length) {
-      el.innerHTML = '<p class="text-sub text-[14px] py-8 text-center">No stories match this filter yet.</p>';
+      if (!active.length && buildStart) { paintBuilding(el); return; }
+      el.innerHTML = active.length
+        ? '<p class="text-sub text-[14px] py-8 text-center">No stories match this filter yet.</p>'
+        : `<div class="bg-white border border-line rounded-2xl px-6 py-9 text-center">
+             <p class="text-[15px] font-semibold text-ink mb-2">Nothing in the last hour</p>
+             <p class="text-[13.5px] text-sub max-w-[460px] mx-auto leading-relaxed">The board only
+             shows what broke in the past hour, so it is genuinely empty in a quiet patch rather
+             than broken. Hit Refresh stories to look again.</p></div>`;
       return;
     }
     // Two bands, so a fresh article on yesterday's story is never mistaken for
@@ -275,16 +345,19 @@ const StoryDesk = (() => {
     icon.textContent = '…';
     setUpdated('finding new stories…');
     setLive('busy');
+    building(true);
     // Run a full ingest cycle (~25s on serverless), then repaint the board
     // from the latest rundown — don't wait for the next background poll. If the
     // cycle ever times out, still repaint with whatever committed.
     try { await api('/api/ingest'); } catch { /* repaint below regardless */ }
     try {
       const data = await (await fetch('/api/rundown')).json();
+      building(false);
       if (Array.isArray(data)) render(data);
       setLive('live');
       setUpdated('Refreshed just now');
     } catch {
+      building(false);
       setLive('offline');
     }
     icon.textContent = '⟳';
@@ -441,7 +514,7 @@ const StoryDesk = (() => {
     document.getElementById('pack-overlay').classList.add('hidden');
   }
 
-  return { render, setFilter, pick, pickTop, openPack, openTopPack, closePack, refresh, menu,
+  return { render, building, setFilter, pick, pickTop, openPack, openTopPack, closePack, refresh, menu,
            writeArticle, copyDraft,
            get stories() { return stories; } };
 })();
