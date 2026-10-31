@@ -1,0 +1,66 @@
+# Drives Echo's breaking-news fast lane.
+#
+# Nothing scans the wires on its own in production: APScheduler needs a
+# long-lived process and Vercel serverless has none, and Hobby-plan crons only
+# fire once a day. So the watch has to be poked from outside, and this is the
+# cheapest honest way to do it — the repository is public, so Actions minutes
+# are free.
+#
+# The endpoint answers in about two seconds and does the ~45s scan in a
+# background task, so this job is short. It also throttles itself (90s floor)
+# and no-ops outside Indian working hours, which is why the schedule below can
+# be blunt without costing anything.
+#
+# Worth knowing: GitHub's scheduled runs are best-effort. Five minutes is the
+# documented minimum and runs can arrive late or be skipped when the platform
+# is busy, so treat this as "every five minutes or so". GitHub also disables
+# scheduled workflows on a public repository after 60 days with no commits —
+# if the watch goes quiet, check that first.
+
+name: Breaking watch
+
+on:
+  schedule:
+    # Every 5 minutes. Hours are UTC: 0-15 covers roughly 05:30-21:30 IST,
+    # which brackets the newsroom's active window (06:00-21:00 IST). Outside
+    # it the endpoint returns immediately anyway.
+    - cron: '*/5 0-15 * * *'
+  workflow_dispatch:        # so you can fire one by hand from the Actions tab
+
+concurrency:
+  # A late run must not pile up behind the one before it.
+  group: breaking-watch
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Trigger the fast lane
+        env:
+          CRON_SECRET: ${{ secrets.ECHO_CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::ECHO_CRON_SECRET is not set on this repository."
+            echo "Add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+          # Sent as a header rather than ?secret=, so the value never lands in
+          # a URL that proxies and access logs would keep.
+          response=$(mktemp)
+          code=$(curl -sS --max-time 120 -o "$response" -w '%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://newsroom-dashboard-three.vercel.app/api/cron/fast)
+
+          echo "HTTP $code"
+          cat "$response"
+          echo
+
+          # 200 covers all three good outcomes: scan started, throttled
+          # because another run just went, and skipped outside working hours.
+          if [ "$code" != "200" ]; then
+            echo "::error::Breaking watch ping failed with HTTP $code"
+            exit 1
+          fi
