@@ -275,7 +275,7 @@ def _notify_editor(v: dict) -> None:
     <tr><td style="color:#888;padding:3px 14px 3px 0">Visits</td><td>{v.get('visits', 1)}</td></tr>
     <tr><td style="color:#888;padding:3px 14px 3px 0">When</td><td>{when}</td></tr>
   </table>
-  <p style="font-size:13px;color:#888;margin:18px 0 0">Demo sessions last 15 minutes with metered X and N-Pro use. The full list is on the Ops desk.</p>
+  <p style="font-size:13px;color:#888;margin:18px 0 0">Demo sessions last {SESSION_MINUTES} minutes with metered X and N-Pro use. The full list is on the Ops desk.</p>
 </div>"""
         err = briefing.send_mail(to, subject, html)
         if err:

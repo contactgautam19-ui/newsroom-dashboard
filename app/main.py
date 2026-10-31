@@ -247,7 +247,7 @@ _GUEST_HTML = """<!DOCTYPE html>
     <label>Organisation <span style="color:#5E6B80">(optional)</span></label><input id="org" autocomplete="organization" maxlength="120">
     <button id="b1" type="submit">Email me a code</button>
     <div id="e1" class="err"></div>
-    <p class="note">Demo sessions last 15 minutes: the live board, alerts and on-air monitor, Hyper Search, N-Pro scripting, and up to 3 live X pulls. Settings and publishing stay locked. Gautam is notified when you enter.</p>
+    <p class="note">Demo sessions last __SESSION_MINUTES__ minutes: the live board, alerts and on-air monitor, Hyper Search, N-Pro scripting, and up to 3 live X pulls. Settings and publishing stay locked. Gautam is notified when you enter.</p>
   </form>
   <form id="f2" class="hidden">
     <p class="sub" id="sent"></p>
@@ -281,7 +281,10 @@ $('again').onclick=()=>{$('f2').classList.add('hidden');$('f1').classList.remove
 
 @app.get("/guest", response_class=HTMLResponse)
 def guest_page():
-    return _GUEST_HTML
+    # Substituted rather than hardcoded: the page told visitors 15 minutes
+    # for as long as the constant said 30, and a sign-in page that misstates
+    # how long you get is the first thing a visitor catches you on.
+    return _GUEST_HTML.replace("__SESSION_MINUTES__", str(guest.SESSION_MINUTES))
 
 
 @app.post("/api/guest/request")

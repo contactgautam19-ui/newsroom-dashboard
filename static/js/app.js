@@ -239,7 +239,7 @@ async function applyRole() {
   if (me.expires_at) guestCountdown(me.expires_at * 1000);
 }
 
-// A demo sitting is 15 minutes: show the time left, then hand the guest back
+// A demo sitting is time-boxed: show the time left, then hand the guest back
 // to the guest page rather than leaving them on a dashboard that stopped working.
 function guestCountdown(expiresMs) {
   const role = document.getElementById('user-role');
