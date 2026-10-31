@@ -607,6 +607,13 @@ def cron_fast(request: Request, tasks: BackgroundTasks, secret: str = ""):
     _require_cron(secret, request)
     from datetime import datetime, timezone
     from app import settings_store
+    # Overnight pings cost real money for nothing: a scan at 3am IST finds a
+    # quiet wire and a newsroom with nobody in it. The pinger can run around
+    # the clock; outside working hours this is a no-op that returns at once.
+    if not scheduler.in_active_window():
+        return {"scanned": False, "reason": "outside active window",
+                "window_ist": f"{config.ACTIVE_WINDOW_START:02d}:00-"
+                              f"{config.ACTIVE_WINDOW_END:02d}:00"}
     now = datetime.now(timezone.utc)
     last = settings_store.get_setting(_FAST_CRON_KEY, "")
     try:

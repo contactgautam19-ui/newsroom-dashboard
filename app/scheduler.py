@@ -8,7 +8,7 @@
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -20,8 +20,20 @@ log = logging.getLogger("newsroom.scheduler")
 scheduler = BackgroundScheduler()
 
 
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
 def in_active_window() -> bool:
-    return config.ACTIVE_WINDOW_START <= datetime.now().hour < config.ACTIVE_WINDOW_END
+    """Is it newsroom working hours in India?
+
+    ACTIVE_WINDOW_START/END are IST hours — 6 to 21 means a working day, not
+    a window that drifts with the server. datetime.now() is naive local time,
+    which is IST on Gautam's machine but UTC on Vercel, so the window landed
+    five and a half hours early in production. Everything else in the codebase
+    already converts to IST explicitly; this now does too.
+    """
+    hour = datetime.now(IST).hour
+    return config.ACTIVE_WINDOW_START <= hour < config.ACTIVE_WINDOW_END
 
 
 def hourly_ingest_job() -> None:
