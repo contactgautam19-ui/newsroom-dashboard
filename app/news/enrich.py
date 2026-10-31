@@ -24,6 +24,15 @@ THEME_TERMS = {
     "violence": [
         "attack", "shooting", "stabbing", "murder", "killed", "clash", "riot",
         "violence", "assault", "terror", "blast", "encounter", "firing", "mob",
+        # Fatalities. The list above could describe how someone died but had
+        # no word for the fact that they did, so "2 foreign nationals die of
+        # suspected electrocution" scored zero on public safety and zero on
+        # audience emotion. Matching is exact and word-bounded, so each
+        # inflection has to be listed.
+        "kills", "dies", "die", "died", "dead", "death", "deaths",
+        "death toll", "toll", "fatal", "fatally", "fatalities", "casualties",
+        "shot dead", "beaten to death", "hacked to death", "lynched",
+        "gunned down", "massacre", "manslaughter", "homicide",
     ],
     "economy": [
         "rupee", "sensex", "nifty", "rbi", "inflation", "gdp", "budget", "gst",
@@ -38,6 +47,9 @@ THEME_TERMS = {
         "earthquake", "flood", "cyclone", "landslide", "collapse", "derail",
         "crash", "fire", "blaze", "explosion", "rescue", "evacuate", "evacuation",
         "drown", "drowns", "drowned", "cloudburst", "heatwave", "storm",
+        "electrocution", "electrocuted", "electrocute", "stampede", "mishap",
+        "accident", "trapped", "gutted", "capsized", "avalanche", "tsunami",
+        "gas leak", "short circuit", "building collapse", "wall collapse",
     ],
     "breaking": [
         "breaking", "just in", "live:", "live updates", "big breaking", "alert",

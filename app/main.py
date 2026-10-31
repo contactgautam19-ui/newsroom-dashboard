@@ -407,6 +407,25 @@ def alerts_feed(hours: int = 12, limit: int = 40):
              ).isoformat()
     items = []
     with db.connect() as con:
+        # fast lane: spotted on the wires, usually before the ranking cycle has
+        # had a chance to run. These are the earliest thing the desk can see,
+        # so they lead the feed and carry their own reasons for being here.
+        for r in con.execute(
+                "SELECT title, publisher, urgency, outlets, reasons, first_seen, "
+                "story_id, on_board, promoted FROM fast_signals "
+                "WHERE first_seen >= ? ORDER BY first_seen DESC LIMIT ?",
+                (since, limit)).fetchall():
+            try:
+                reasons = json.loads(r["reasons"] or "[]")
+            except (ValueError, TypeError):
+                reasons = []
+            items.append({"kind": "fast", "source": r["publisher"] or "Wires",
+                          "title": r["title"], "at": r["first_seen"],
+                          "story_id": r["story_id"],
+                          "urgency": r["urgency"], "outlets": r["outlets"],
+                          "why": reasons,
+                          "tag": ("ON THE BOARD" if (r["on_board"] or r["promoted"])
+                                  else f"BREAKING WATCH · {r['urgency']}")})
         # board stories: flagged the moment a breaking or high-ranking story is
         # FIRST detected (first_seen_at), not when its article was published
         for r in con.execute(
@@ -451,8 +470,11 @@ def alerts_feed(hours: int = 12, limit: int = 40):
     return items[:limit]
 
 
-ALERT_STORY_SCORE = 55        # non-breaking stories at/above this still alert
-ALERT_SCAN_MIN_SECONDS = 150  # floor between source scans, shared by all viewers
+ALERT_STORY_SCORE = 55       # non-breaking stories at/above this still alert
+# The scan used to run a full ingest cycle, so it could not be allowed near a
+# breaking-news cadence. It now runs the fast lane (~6s, no enrichment), so
+# the floor is set by politeness to the sources rather than by our own cost.
+ALERT_SCAN_MIN_SECONDS = 45
 _ALERT_SCAN_KEY = "alerts_last_scan"
 
 
@@ -478,15 +500,23 @@ async def alerts_scan():
     settings_store.set_setting(_ALERT_SCAN_KEY, now.isoformat())
 
     def _scan() -> dict:
-        from app.news import live_monitor, onair
+        from app.news import fastlane, live_monitor, onair
         out = {}
-        for name, fn in (("stories", lambda: ingest.run_ingest_cycle(manual=True)),
+        # The fast lane replaces the full ingest cycle here. Looking for what
+        # is breaking and ranking a whole rundown are different jobs running
+        # at different speeds; only the first one belongs on this loop.
+        for name, fn in (("stories", fastlane.run_fast_scan),
                          ("clips", live_monitor.run_live_cycle),
                          ("onair", onair.run_onair_cycle)):
             try:
                 res = fn()
-                out[name] = (res.get("new_stories", res.get("ok", True))
-                             if isinstance(res, dict) else True)
+                if name == "stories" and isinstance(res, dict):
+                    out["raised"] = res.get("raised", 0)
+                    out["promoted"] = res.get("promoted", 0)
+                    out["stories"] = res.get("raised", 0)
+                else:
+                    out[name] = (res.get("new_stories", res.get("ok", True))
+                                 if isinstance(res, dict) else True)
             except Exception as exc:  # one dead source must not stop the others
                 out[name] = f"failed: {exc}"
         return out
@@ -551,6 +581,16 @@ def _require_cron(secret: str, request: "Request") -> None:
 def cron_tick(request: Request, secret: str = ""):
     _require_cron(secret, request)
     return ingest.run_ingest_cycle()
+
+
+@app.get("/api/cron/fast")
+async def cron_fast(request: Request, secret: str = ""):
+    """The breaking watch. Cheap enough to run every couple of minutes, which
+    is the whole point — the full cycle at /api/cron/tick cannot be."""
+    _require_cron(secret, request)
+    from app.news import fastlane
+    return await asyncio.get_running_loop().run_in_executor(
+        None, fastlane.run_fast_scan)
 
 
 @app.get("/api/cron/live")

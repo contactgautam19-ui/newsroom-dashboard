@@ -127,8 +127,19 @@ def _cluster(articles: list[RawArticle]) -> list[RawArticle]:
                         lead.corroborators.append(pub)
                 if len(art.summary) > len(lead.summary):
                     lead.summary = art.summary
-                if art.published_at < lead.published_at:
+                # A cluster is filed as of its MOST RECENT member, not its
+                # oldest. Taking the oldest back-dated every breaking story to
+                # whatever stale article happened to share three tokens with
+                # it — the Conrad Hotel electrocution, carried by six outlets
+                # within two hours, inherited a timestamp from two days
+                # earlier and was dropped by the freshness gate before it
+                # could ever reach the board. published_at drives that gate,
+                # the retire cutoff and "happening now", and all three want
+                # the latest filing. The earliest is kept separately.
+                if art.published_at > lead.published_at:
                     lead.published_at = art.published_at
+                if art.published_at < lead.first_filed_at:
+                    lead.first_filed_at = art.published_at
                 if art.discovered_via and not lead.discovered_via:
                     lead.discovered_via = art.discovered_via
                 c_tokens |= tokens
@@ -136,5 +147,7 @@ def _cluster(articles: list[RawArticle]) -> list[RawArticle]:
         else:
             if not art.corroborators:
                 art.corroborators = [art.publisher]
+            if not art.first_filed_at:
+                art.first_filed_at = art.published_at
             clusters.append((tokens, art))
     return [lead for _, lead in clusters]

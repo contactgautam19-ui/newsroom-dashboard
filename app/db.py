@@ -152,6 +152,26 @@ CREATE TABLE IF NOT EXISTS live_onair (
     source TEXT NOT NULL DEFAULT 'title'       -- ocr | x | title | web
 );
 
+-- Breaking-news fast lane: candidates spotted by the cheap scan, which runs
+-- far more often than the full ranking cycle. A row here means "an editor
+-- should know about this now", independent of whether it has reached the
+-- board yet — on_board/promoted record how far it got.
+CREATE TABLE IF NOT EXISTS fast_signals (
+    signal_key TEXT PRIMARY KEY,               -- dedup_key of the headline
+    title TEXT NOT NULL,
+    url TEXT,
+    publisher TEXT,
+    published_at TEXT,
+    outlets INTEGER NOT NULL DEFAULT 1,        -- outlets carrying it at detection
+    urgency INTEGER NOT NULL DEFAULT 0,        -- 0-100, running peak
+    reasons TEXT NOT NULL DEFAULT '[]',        -- JSON: why it scored what it did
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    on_board INTEGER NOT NULL DEFAULT 0,       -- already a Story Desk row
+    promoted INTEGER NOT NULL DEFAULT 0,       -- this lane put it on the board
+    story_id INTEGER                           -- the row it became, if promoted
+);
+
 CREATE TABLE IF NOT EXISTS guest_otps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT NOT NULL,

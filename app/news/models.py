@@ -35,6 +35,10 @@ class RawArticle:
     source_country: str = "INTL"        # "IN" for Indian outlets, else "INTL"
     corroborators: list = field(default_factory=list)  # outlets in this cluster
     discovered_via: str = ""            # trending keyword that surfaced this story
+    # When the earliest outlet in this cluster filed. published_at tracks the
+    # LATEST filing (freshness, retirement, "happening now"); this keeps the
+    # first so the two questions stay distinguishable.
+    first_filed_at: str = ""
 
 
 @dataclass

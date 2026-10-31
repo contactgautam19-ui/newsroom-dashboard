@@ -179,7 +179,7 @@ const StoryDesk = (() => {
           for an Indian newsroom right now.
         </p>
         <p class="text-[13.5px] text-sub leading-relaxed max-w-[540px] mx-auto mt-2.5">
-          The first run takes up to about two minutes. After that it is a few seconds.
+          This usually takes a few seconds, occasionally longer if a source is slow.
           Stories appear here on their own, so there is nothing to click.
         </p>
         <p class="mt-5 font-mono text-[11.5px] text-muted" data-elapsed>Working for ${elapsedLabel()}</p>

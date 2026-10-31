@@ -26,6 +26,11 @@ EMOTION_TERMS = {
     "outrage": ["scam", "corruption", "fraud", "injustice", "assault", "shocking abuse"],
     "surprise": ["shock", "stun", "unexpected", "surprise", "sudden", "dramatic"],
     "awe": ["historic", "first ever", "record", "massive", "unprecedented", "biggest"],
+    # Loss. Without this a fatal incident registered no audience emotion at
+    # all, which is the opposite of how a newsroom reads one.
+    "grief": ["dead", "die", "dies", "died", "death", "deaths", "killed",
+              "tragedy", "tragic", "mourning", "bereaved", "victims", "toll",
+              "demise", "funeral", "cremated", "condolence", "condolences"],
 }
 
 POWER_FIGURES = [

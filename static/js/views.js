@@ -56,9 +56,13 @@ const Views = (() => {
     tv:       { icon: '📺', bar: '#F0A93B', chip: 'bg-amber1 text-amber8', label: 'On air' },
     x:        { icon: 'X',  bar: '#8C9AB0', chip: 'bg-paper text-ink', label: 'X' },
     velocity: { icon: '🚀', bar: '#8FB4E8', chip: 'bg-blue1 text-blue8', label: 'Viral' },
+    fast:     { icon: '📡', bar: '#F5B82E', chip: 'bg-amber1 text-amber8', label: 'Breaking watch' },
   };
   const FEED_EVERY_MS = 20000;
-  const SCAN_EVERY_MS = 150000;
+  // The scan behind this is now the fast lane rather than a full ingest
+  // cycle, so it can run at something like a breaking-news cadence. The
+  // server throttles it across all viewers, so asking often is cheap.
+  const SCAN_EVERY_MS = 60000;
   const A = { items: [], known: null, fresh: new Set(), kind: 'all',
               feedTimer: null, scanTimer: null, tickTimer: null,
               scanning: false, lastScan: null, lastFeed: null };
@@ -85,6 +89,7 @@ const Views = (() => {
             <span class="font-semibold ml-1.5">${esc(a.source)}</span>
           </p>
           <p class="text-[14px] leading-snug">${esc(a.title)}</p>
+          ${Array.isArray(a.why) && a.why.length ? `<p class="text-[12px] text-sub mt-1">${esc(a.why.join(' · '))}</p>` : ''}
         </div>
         <span class="text-[12px] text-sub whitespace-nowrap">${ageLabel(a.at)}</span>
       </div>`;
@@ -198,8 +203,22 @@ const Views = (() => {
 (() => {
   const seen = new Set();
   let first = true;
+  let lastScan = 0;
+  const SCAN_EVERY = 90000;
+
+  // Reading the stored feed only ever shows what some earlier scan found. A
+  // breaking-news watch has to actually go and look, from whatever page the
+  // editor happens to be on — the Alerts tab being open was never a sensible
+  // precondition for noticing that something is breaking.
+  async function scan() {
+    if (Date.now() - lastScan < SCAN_EVERY) return;
+    lastScan = Date.now();
+    try { await fetch('/api/alerts/scan', { method: 'POST' }); } catch { /* the read below still runs */ }
+  }
+
   async function tick() {
     if (document.visibilityState !== 'visible') return;
+    await scan();
     let items = [];
     try { items = await (await fetch('/api/alerts/feed?hours=2&limit=20', { cache: 'no-store' })).json(); } catch { return; }
     if (!Array.isArray(items)) return;
@@ -208,7 +227,11 @@ const Views = (() => {
       if (seen.has(key)) continue;
       seen.add(key);
       if (first) continue; // seed silently on load
-      if (a.kind === 'story' && a.tag === 'BREAKING') Flash.show('breaking', a.title, a.story_id);
+      // A high-urgency wire signal is the earliest warning there is: it fires
+      // before the story has been ranked, let alone put on the board.
+      if (a.kind === 'fast' && a.urgency >= 70) Flash.show('breaking', a.title, a.story_id);
+      else if (a.kind === 'fast') bumpAlerts();
+      else if (a.kind === 'story' && a.tag === 'BREAKING') Flash.show('breaking', a.title, a.story_id);
       else if (a.kind === 'tv') Flash.show('breaking', `${a.source} breaking: ${a.title}`);
       else if (a.kind === 'x' && /breaking|flash/i.test(a.tag)) Flash.show('breaking', `${a.source}: ${a.title}`);
       else if (a.kind === 'velocity') Flash.show('viral', a.title);
