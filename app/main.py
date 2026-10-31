@@ -586,14 +586,50 @@ def cron_tick(request: Request, secret: str = ""):
     return ingest.run_ingest_cycle()
 
 
+FAST_CRON_MIN_SECONDS = 90   # floor between pinger-driven scans
+_FAST_CRON_KEY = "fast_cron_last"
+
+
 @app.get("/api/cron/fast")
-async def cron_fast(request: Request, secret: str = ""):
-    """The breaking watch. Cheap enough to run every couple of minutes, which
-    is the whole point — the full cycle at /api/cron/tick cannot be."""
+def cron_fast(request: Request, tasks: BackgroundTasks, secret: str = ""):
+    """The breaking watch, driven by an external pinger every few minutes.
+
+    Returns immediately and scans in the background. The scan takes about six
+    seconds locally but around forty from Vercel — the feeds are in India and
+    the function is not — and a pinger that waits forty seconds for a reply
+    will log a timeout on every run. The work still happens either way; this
+    just stops the pinger's dashboard filling up with red.
+
+    Throttled through the database rather than in memory, because each
+    serverless invocation gets its own process and a per-process guard would
+    not stop two overlapping pings from both running a full scan.
+    """
     _require_cron(secret, request)
+    from datetime import datetime, timezone
+    from app import settings_store
+    now = datetime.now(timezone.utc)
+    last = settings_store.get_setting(_FAST_CRON_KEY, "")
+    try:
+        age = (now - datetime.fromisoformat(last)).total_seconds() if last else None
+    except ValueError:
+        age = None
+    if age is not None and age < FAST_CRON_MIN_SECONDS:
+        return {"scanned": False, "reason": "throttled", "last_scan": last,
+                "next_in": int(FAST_CRON_MIN_SECONDS - age)}
+    settings_store.set_setting(_FAST_CRON_KEY, now.isoformat())
+    tasks.add_task(_run_fast_scan_bg)
+    return {"scanned": True, "started_at": now.isoformat(),
+            "note": "scan running in background"}
+
+
+def _run_fast_scan_bg() -> None:
     from app.news import fastlane
-    return await asyncio.get_running_loop().run_in_executor(
-        None, fastlane.run_fast_scan)
+    try:
+        result = fastlane.run_fast_scan()
+        log.info("fast scan: raised=%s promoted=%s",
+                 result.get("raised"), result.get("promoted"))
+    except Exception:
+        log.exception("fast scan failed")
 
 
 @app.get("/api/cron/live")
