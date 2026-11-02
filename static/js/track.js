@@ -86,8 +86,10 @@ const Track = (() => {
           ${t.unseen ? `<span class="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded" style="background:var(--green);color:#06210F">${t.unseen} NEW</span>` : ''}
         </div>
         <p class="text-[12px] text-sub">
-          ${t.updates_count || 0} ${t.updates_count === 1 ? 'development' : 'developments'}
-          ${t.last_update_at ? ` · latest ${esc(ago(t.last_update_at))}` : ' · nothing yet'}
+          ${t.updates_count
+            ? `${t.updates_count} ${t.updates_count === 1 ? 'development' : 'developments'}`
+              + (t.last_update_at ? ` · latest ${esc(ago(t.last_update_at))}` : '')
+            : 'Still looking — nothing matched yet. Echo retries every scan.'}
         </p>
       </article>`).join('');
   }
@@ -137,7 +139,9 @@ const Track = (() => {
         return;
       }
       await load();
-      Toast.show(`Tracking “${label}” — ${data.updates_count || 0} developments so far`);
+      Toast.show(data.updates_count
+        ? `Tracking “${label}” — ${data.updates_count} developments so far`
+        : `Tracking “${label}” — nothing matched yet. Try naming it the way headlines would.`);
       if (data.id) open(data.id);
     } catch {
       Toast.show('Could not reach the server.');
@@ -204,7 +208,15 @@ const Track = (() => {
         </div>
         ${shape ? `<div class="mt-3.5">${shape}</div>` : ''}
       </div>
-      <div class="max-h-[55vh] overflow-y-auto">${rows || '<p class="p-8 text-center text-sub text-[13.5px]">Nothing yet. Echo checks again with every scan.</p>'}</div>`);
+      <div class="max-h-[55vh] overflow-y-auto">${rows || `
+        <div class="px-8 py-10 text-center">
+          <p class="text-[15px] font-semibold text-ink mb-2">Nothing has matched this yet</p>
+          <p class="text-[13.5px] text-sub max-w-[420px] mx-auto leading-relaxed">
+            Echo searched the last week and found no coverage under this name. It keeps
+            trying with every scan, so if the story is real this will fill in by itself.
+            If it stays empty, rename it the way a headline would put it.
+          </p>
+        </div>`}</div>`);
 
     fetch(`/api/track/${id}/seen`, { method: 'POST' }).then(load).catch(() => {});
   }

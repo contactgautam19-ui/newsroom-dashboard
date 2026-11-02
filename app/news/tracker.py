@@ -33,12 +33,45 @@ log = logging.getLogger("newsroom.tracker")
 
 SEARCH_TIMEOUT = 12
 MAX_ACTIVE_TRACKS = 12        # each costs one HTTP request per scan
-RESULTS_PER_CHECK = 40
-BACKFILL_WINDOW = "1d"        # first check: establish the day's timeline
-POLL_WINDOW = "6h"            # later checks: just the new material
+RESULTS_PER_CHECK = 60
+
+# A new track must open on the story so far, not on an empty panel. The
+# windows are tried in order and their results merged: one day gives today's
+# detail, a week gives the run-up. The unbounded search is only reached if
+# those two came back thin, because on a long-running topic it reaches back
+# months and most of that is not a development.
+BACKFILL_WINDOWS = ["1d", "7d"]
+BACKFILL_DEEP = ""            # no when: filter — only if the ladder is thin
+BACKFILL_THIN = 8             # items below which we go deeper
+
+# Polls size their window to the gap since the last check rather than using a
+# fixed one. A machine that slept overnight, or a scan loop that stopped,
+# would otherwise come back asking only about the last six hours and lose
+# everything that happened while nothing was looking.
+POLL_FLOOR = "2h"
 _HEADERS = {"User-Agent": "Mozilla/5.0 (NewsroomDashboard/1.0)"}
-_SEARCH = ("https://news.google.com/rss/search?q={q}+when:{w}"
+_SEARCH = ("https://news.google.com/rss/search?q={q}{w}"
            "&hl=en-IN&gl=IN&ceid=IN:en")
+
+
+def _window_for_gap(last_checked_at: str | None) -> str:
+    """Pick a search window that covers everything since the last check."""
+    if not last_checked_at:
+        return "7d"
+    try:
+        gap_h = ((datetime.now(timezone.utc)
+                  - datetime.fromisoformat(last_checked_at)).total_seconds() / 3600)
+    except (ValueError, TypeError):
+        return "7d"
+    if gap_h <= 1:
+        return POLL_FLOOR        # generous: Google's clock is not ours
+    if gap_h <= 5:
+        return "12h"
+    if gap_h <= 20:
+        return "1d"
+    if gap_h <= 72:
+        return "7d"
+    return "7d"
 
 _norm_re = re.compile(r"[^a-z0-9 ]+")
 
@@ -141,10 +174,15 @@ def start(label: str, query: str = "", story_id: int | None = None,
             (label, query, story_id, now, created_by))
         tracked_id = cur.lastrowid
 
-    # Backfill straight away, so the editor sees a timeline rather than an
-    # empty panel and a promise.
-    check_one(tracked_id, window=BACKFILL_WINDOW)
-    return get(tracked_id)
+    # Backfill straight away, so the editor sees the story so far rather than
+    # an empty panel and a promise. A track that opens on zero is worse than
+    # useless: it reads as "nothing is happening" when the truth is "I have
+    # not looked yet".
+    result = check_one(tracked_id, backfill=True)
+    track = get(tracked_id)
+    if not result.get("ok"):
+        track["backfill_error"] = result.get("error", "")
+    return track
 
 
 def stop(tracked_id: int) -> bool:
@@ -155,7 +193,9 @@ def stop(tracked_id: int) -> bool:
 
 
 def _fetch(query: str, window: str) -> list[dict]:
-    url = _SEARCH.format(q=quote_plus(query), w=window)
+    """One search. `window` is a Google `when:` value, or "" for no filter."""
+    url = _SEARCH.format(q=quote_plus(query),
+                         w=f"+when:{window}" if window else "")
     resp = httpx.get(url, timeout=SEARCH_TIMEOUT, follow_redirects=True,
                      headers=_HEADERS)
     resp.raise_for_status()
@@ -176,8 +216,14 @@ def _fetch(query: str, window: str) -> list[dict]:
     return out
 
 
-def check_one(tracked_id: int, window: str = POLL_WINDOW) -> dict:
-    """Re-run one standing search and record whatever is new."""
+def check_one(tracked_id: int, window: str | None = None,
+              backfill: bool = False) -> dict:
+    """Re-run one standing search and record whatever is new.
+
+    `window` defaults to whatever covers the gap since the last check, so a
+    track that went unchecked overnight catches up instead of asking about
+    the last few hours and silently losing the rest.
+    """
     with db.connect() as con:
         row = con.execute("SELECT * FROM tracked_stories WHERE id=?",
                           (tracked_id,)).fetchone()
@@ -185,14 +231,40 @@ def check_one(tracked_id: int, window: str = POLL_WINDOW) -> dict:
         return {"ok": False, "error": "no such tracked story"}
 
     now = datetime.now(timezone.utc).isoformat()
-    try:
-        items = _fetch(row["query"], window)
-    except Exception as exc:
-        log.warning("track %s fetch failed: %s", tracked_id, exc)
-        with db.connect() as con:
-            con.execute("UPDATE tracked_stories SET last_checked_at=? WHERE id=?",
-                        (now, tracked_id))
-        return {"ok": False, "error": str(exc), "new": 0}
+    windows = (BACKFILL_WINDOWS if backfill
+               else [window or _window_for_gap(row["last_checked_at"])])
+
+    items, errors = [], []
+    seen_urls = set()
+    for win in windows:
+        try:
+            for it in _fetch(row["query"], win):
+                if it["url"] and it["url"] in seen_urls:
+                    continue
+                seen_urls.add(it["url"])
+                items.append(it)
+        except Exception as exc:
+            errors.append(f"when:{win or 'all'}: {exc}")
+            log.warning("track %s fetch failed (%s): %s", tracked_id, win, exc)
+
+    # A new track with almost nothing in it is usually a story that started
+    # before the week, not a story with no coverage. Reach further back.
+    if backfill and len(items) < BACKFILL_THIN:
+        try:
+            for it in _fetch(row["query"], BACKFILL_DEEP):
+                if it["url"] and it["url"] in seen_urls:
+                    continue
+                seen_urls.add(it["url"])
+                items.append(it)
+        except Exception as exc:
+            errors.append(f"deep: {exc}")
+
+    if not items and errors:
+        # Every search failed. Do NOT stamp last_checked_at — leaving it unset
+        # keeps this track on the wide catch-up window so the next scan tries
+        # the full backfill again rather than treating the gap as covered.
+        return {"ok": False, "error": "; ".join(errors), "new": 0,
+                "total": row["updates_count"] or 0}
 
     added = []
     with db.connect() as con:
@@ -226,16 +298,20 @@ def check_all() -> dict:
     """Re-run every active standing search. Called from the fast lane."""
     with db.connect() as con:
         rows = con.execute(
-            "SELECT id, last_checked_at FROM tracked_stories WHERE active=1 "
-            "ORDER BY id LIMIT ?", (MAX_ACTIVE_TRACKS,)).fetchall()
+            "SELECT id, last_checked_at, updates_count FROM tracked_stories "
+            "WHERE active=1 ORDER BY id LIMIT ?", (MAX_ACTIVE_TRACKS,)).fetchall()
     if not rows:
         return {"tracked": 0, "new": 0}
 
     results = {}
     # One request each, in parallel: twelve sequential searches would make the
-    # fast lane slow enough to stop being a fast lane.
+    # fast lane slow enough to stop being a fast lane. A track still sitting
+    # on zero gets the full backfill again — its first attempt evidently did
+    # not land, and an empty tracked story is the one state worth retrying.
     with ThreadPoolExecutor(max_workers=6) as pool:
-        futures = {pool.submit(check_one, r["id"]): r["id"] for r in rows}
+        futures = {
+            pool.submit(check_one, r["id"], None, not (r["updates_count"] or 0)): r["id"]
+            for r in rows}
         for fut in as_completed(futures):
             tid = futures[fut]
             try:
