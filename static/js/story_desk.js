@@ -6,9 +6,12 @@ const StoryDesk = (() => {
   let sortBy = 'score';
 
   const STATUS = {
-    breaking:   { label: 'Breaking',   bar: '#EC4A4D', bg: 'bg-red1',   text: 'text-red8',   circleBg: '#2A1216', circleText: '#FF8A8A' },
-    developing: { label: 'Developing', bar: '#F79009', bg: 'bg-amber1', text: 'text-amber8', circleBg: '#2A2010', circleText: '#F6C777' },
-    verified:   { label: 'Verified',   bar: '#34C38A', bg: 'bg-green1', text: 'text-green8', circleBg: '#0F2A20', circleText: '#7BE0B4' },
+    // The score circle is written inline, so its colours go through the theme
+    // variables rather than hex: hard-coded dark tints survived the switch to
+    // light mode and left the score unreadable on a white card.
+    breaking:   { label: 'Breaking',   bar: '#EC4A4D', bg: 'bg-red1',   text: 'text-red8',   circleBg: 'var(--tint-red)',   circleText: 'var(--red)' },
+    developing: { label: 'Developing', bar: '#F79009', bg: 'bg-amber1', text: 'text-amber8', circleBg: 'var(--tint-amber)', circleText: 'var(--amber)' },
+    verified:   { label: 'Verified',   bar: '#34C38A', bg: 'bg-green1', text: 'text-green8', circleBg: 'var(--tint-green)', circleText: 'var(--green)' },
   };
 
   const CHIP_COLORS = {
@@ -101,7 +104,7 @@ const StoryDesk = (() => {
           ${corroborated ? `<span class="text-green6 font-medium">+${s.sources.length - 1} more</span>` : ''}
           ${s.trend_boost > 0 ? '<span class="text-blue6 font-medium">↗ trending on X</span>' : ''}
         </p>
-        <p class="text-[12.5px] text-sub mt-1.5"><span class="font-semibold text-ink/60">Why:</span> ${esc(whyLine(s))}</p>
+        <p class="text-[12.5px] text-sub mt-1.5"><span class="font-semibold text-ink">Why:</span> ${esc(whyLine(s))}</p>
       </div>
       <div class="w-full sm:w-auto flex sm:flex-col flex-row gap-2 items-stretch shrink-0 sm:justify-center">
         <button onclick="NPro.open(${s.id})" class="flex-1 sm:flex-none text-[12.5px] font-semibold px-4 py-2 rounded-xl bg-navy text-white hover:bg-navy2 whitespace-nowrap transition-colors">Pick Story</button>

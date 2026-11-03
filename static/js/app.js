@@ -32,6 +32,43 @@ function postedLabel(iso) {
 
 // Sidebar navigation. Views map onto three page sections plus two extra
 // views; My Picks / Assignments / Top Stories are filtered story views.
+// Light / dark. The rails stay dark in both: a newsroom reads the canvas,
+// not the furniture, and the labels inside the sidebar are white either way.
+// The chosen theme is remembered per browser; the head applies it before
+// first paint so there is no flash.
+const Theme = (() => {
+  const KEY = 'echo-theme';
+
+  function current() {
+    return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  }
+
+  function paintButtons(theme) {
+    const light = theme === 'light';
+    document.querySelectorAll('.theme-icon-dark').forEach(el => el.classList.toggle('hidden', light));
+    document.querySelectorAll('.theme-icon-light').forEach(el => el.classList.toggle('hidden', !light));
+    const btn = document.getElementById('theme-btn');
+    if (btn) btn.title = light ? 'Switch to dark mode' : 'Switch to light mode';
+  }
+
+  function apply(theme, animate) {
+    const html = document.documentElement;
+    if (animate) {
+      html.classList.add('theme-switching');
+      setTimeout(() => html.classList.remove('theme-switching'), 260);
+    }
+    if (theme === 'light') html.setAttribute('data-theme', 'light');
+    else html.removeAttribute('data-theme');
+    try { localStorage.setItem(KEY, theme); } catch (e) { /* private window */ }
+    paintButtons(theme);
+  }
+
+  function toggle() { apply(current() === 'light' ? 'dark' : 'light', true); }
+  function init() { paintButtons(current()); }
+
+  return { toggle, apply, init, current };
+})();
+
 const Nav = (() => {
   const VIEWS = {
     stories: { page: 'page-stories', nav: 'stories', title: 'Story Desk', subtitle: 'Your command center for real-time editorial decisions.' },
@@ -225,6 +262,7 @@ const Flash = (() => {
 })();
 
 window.addEventListener('DOMContentLoaded', () => {
+  Theme.init();
   const initial = location.hash.replace('#', '');
   if (initial && initial !== 'stories') Nav.go(initial);
   else Nav.go('stories');

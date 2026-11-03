@@ -83,7 +83,7 @@ const Track = (() => {
       <article onclick="Track.open(${t.id})" class="bg-paper border border-line rounded-xl p-4 cursor-pointer hover:border-ink transition-colors">
         <div class="flex items-start gap-2 mb-2">
           <p class="text-[14px] font-semibold leading-snug flex-1 min-w-0">${esc(t.label)}</p>
-          ${t.unseen ? `<span class="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded" style="background:var(--green);color:#06210F">${t.unseen} NEW</span>` : ''}
+          ${t.unseen ? `<span class="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded" style="background:var(--green);color:var(--green-ink)">${t.unseen} NEW</span>` : ''}
         </div>
         <p class="text-[12px] text-sub">
           ${t.updates_count

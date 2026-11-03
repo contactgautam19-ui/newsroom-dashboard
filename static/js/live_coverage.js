@@ -23,11 +23,15 @@ const LiveCoverage = (() => {
   // as "breaking" and India Today's blue read as "AI generated" on every
   // card. Identity is carried by the rule and the name; status is carried by
   // a fill, and only status gets to be saturated.
+  // Through variables, not hex: these are pitched to sit quietly on a dark
+  // card, and the same values on a white one fall under 3:1 and stop being
+  // readable. The light theme carries a darkened set of the same hues.
   const CHANNEL_COLORS = {
-    'NDTV 24x7': '#C96E70', 'India Today': '#7C9BC4', 'Times Now': '#9389C4',
-    'Republic TV': '#C49A5E', 'CNN-News18': '#5FA99B', 'WION': '#C48BA6',
+    'NDTV 24x7': 'var(--ch-ndtv)', 'India Today': 'var(--ch-indiatoday)',
+    'Times Now': 'var(--ch-timesnow)', 'Republic TV': 'var(--ch-republic)',
+    'CNN-News18': 'var(--ch-news18)', 'WION': 'var(--ch-wion)',
   };
-  const accent = c => CHANNEL_COLORS[c] || '#8C9AB0';
+  const accent = c => CHANNEL_COLORS[c] || 'var(--ch-default)';
 
   // Airing time in IST, e.g. "6:12 PM". Falls back to nothing rather than a
   // wrong time if the row predates the `at` field.

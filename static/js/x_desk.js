@@ -7,10 +7,15 @@ const XDesk = (() => {
   let groupFilter = 'all'; // 'all' | 'A' | 'B' | 'C'
   let signalsOnly = false;
 
+  // `color` is the 3px identity rule down the card's left edge and stays a
+  // bright hex in both themes — a rule has no contrast requirement. `ink` and
+  // `tint` are the label's text and chip, and go through the theme, because
+  // these tones are pitched for a dark card and drop to about 2:1 on a white
+  // one, which is where the column labels stopped being readable.
   const GROUPS = {
-    A: { label: 'Government & wires', color: '#34C38A' },
-    B: { label: 'Rivals', color: '#F0A93B' },
-    C: { label: 'Field reporters', color: '#8FB4E8' },
+    A: { label: 'Government & wires', color: '#34C38A', ink: 'var(--green)', tint: 'var(--tint-green)' },
+    B: { label: 'Rivals', color: '#F0A93B', ink: 'var(--amber)', tint: 'var(--tint-amber)' },
+    C: { label: 'Field reporters', color: '#8FB4E8', ink: 'var(--blue)', tint: 'var(--tint-blue)' },
   };
 
   function trustColor(score) {
@@ -31,7 +36,9 @@ const XDesk = (() => {
   }
 
   function tweetCard(t, i) {
-    const grp = GROUPS[t.stream_column] || { label: t.stream_column || '', color: '#8C9AB0' };
+    const grp = GROUPS[t.stream_column] || {
+      label: t.stream_column || '', color: '#8C9AB0',
+      ink: 'var(--ink-2)', tint: 'var(--panel)' };
     return `
       <div class="fade-up bg-white border border-line rounded-2xl px-4 py-3 flex items-start gap-3" style="border-left:3px solid ${grp.color}">
         ${avatarHtml(t, i)}
@@ -45,7 +52,7 @@ const XDesk = (() => {
           <p class="text-[13.5px] leading-snug mt-1">${esc(t.text)}</p>
           <div class="flex items-center gap-1.5 flex-wrap mt-1.5">
             ${t.news_signal ? `<span class="text-[10.5px] uppercase tracking-wide text-green6 font-medium">◉ ${esc(t.news_signal)}</span>` : ''}
-            <span class="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style="background:${grp.color}1A;color:${grp.color}">${esc(grp.label)}</span>
+            <span class="text-[10.5px] font-semibold px-1.5 py-0.5 rounded" style="background:${grp.tint};color:${grp.ink}">${esc(grp.label)}</span>
           </div>
         </div>
       </div>`;

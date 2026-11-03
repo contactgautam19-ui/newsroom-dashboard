@@ -14,7 +14,7 @@ const Social = (() => {
                mark: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>' },
     youtube: { label: 'YouTube', sub: 'What India is watching', unit: 'Views', color: '#C96E70',
                mark: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>' },
-    x:       { label: 'X', sub: 'What India is posting', unit: '', color: '#C7D0DC',
+    x:       { label: 'X', sub: 'What India is posting', unit: '', color: 'var(--ink-2)',
                mark: '<span class="text-[15px] font-bold leading-none">𝕏</span>' },
   };
   let data = null;
@@ -181,7 +181,10 @@ const Hyper = (() => {
 
   function card(a) {
     const r = a.populist_resonance_index;
-    const tone = r >= 8 ? '#FF8A8A' : r >= 6 ? '#F6C777' : '#B7D0F5';
+    // Through the theme, not hex: these are pitched for a dark card and the
+    // resonance number went to about 1.6:1 against a white one.
+    const tone = r >= 8 ? 'var(--red)' : r >= 6 ? 'var(--amber)' : 'var(--blue)';
+    const toneBg = r >= 8 ? 'var(--tint-red)' : r >= 6 ? 'var(--tint-amber)' : 'var(--tint-blue)';
     const fl = a.compliance_risk_flags || {};
     const risky = fl.communal_risk_level === 'High' || fl.communal_risk_level === 'Medium';
     const story = (a.stories || [])[0];
@@ -196,7 +199,7 @@ const Hyper = (() => {
     return `
       <div class="bg-white border border-line rounded-2xl p-4 flex flex-col">
         <div class="flex items-start gap-3">
-          <div class="shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-[15px] font-bold" style="background:${tone}14;color:${tone}" title="Resonance, out of 10">${r.toFixed(1)}</div>
+          <div class="shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-[15px] font-bold" style="background:${toneBg};color:${tone}" title="Resonance, out of 10">${r.toFixed(1)}</div>
           <div class="min-w-0">
             <p class="text-[14.5px] font-bold leading-snug" style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden" title="${esc(a.story_vector)}">${esc(a.story_vector)}</p>
             <div class="flex gap-1 flex-wrap mt-1.5">
