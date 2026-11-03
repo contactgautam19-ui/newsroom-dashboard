@@ -282,6 +282,16 @@ def run_fast_scan(promote: bool = True) -> dict:
         log.warning("tracked-story check failed: %s", exc)
         stats["tracking"] = {"error": str(exc)}
 
+    # Everything above leaves its findings on a screen. This is the only part
+    # that reaches somebody who is not looking at one, which is the whole
+    # reason the watch runs unattended.
+    try:
+        from app import alerts_mail
+        stats["alert_mail"] = alerts_mail.dispatch(now)
+    except Exception as exc:          # nor must the mail
+        log.warning("breaking alert mail failed: %s", exc)
+        stats["alert_mail"] = {"error": str(exc)}
+
     result = {"ok": True, "at": now_iso, "raised": len(raised),
               "promoted": len(promoted), "promotions": promoted,
               "top": sorted(raised, key=lambda s: -s["urgency"])[:5], **stats}

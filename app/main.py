@@ -84,8 +84,10 @@ def _passcode_hash() -> str:
 
 # paths reachable without the cookie: the login flow, static assets, and the
 # cron endpoints (which carry their own secret)
+# unsubscribe is exempt on purpose: it arrives from an inbox, carries its own
+# signed token, and an opt-out behind a login is not an opt-out
 _AUTH_EXEMPT_PREFIXES = ("/login", "/api/login", "/static/", "/api/cron/", "/guest",
-                         "/api/guest/", "/landing")
+                         "/api/guest/", "/landing", "/api/alerts/unsubscribe")
 # guests get a demo, not the keys: GET everywhere except the blocked paths, plus
 # the POSTs below. Free actions (board refresh, alert scan, keyless on-air poll)
 # are open; the paid ones are metered per guest — see guest.QUOTAS.
@@ -93,7 +95,8 @@ _GUEST_POST_ALLOW = ("/api/guest/", "/api/ingest", "/api/alerts/scan",
                      "/api/live-coverage/refresh", "/api/x/refresh", "/api/npro/",
                      "/api/hyper/scan", "/api/track")
 # the notebook holds the newsroom's own notes and scripts: not for demo guests
-_GUEST_BLOCK = ("/api/settings", "/api/sim/", "/api/guests", "/api/npro/records")
+_GUEST_BLOCK = ("/api/settings", "/api/sim/", "/api/guests", "/api/npro/records",
+                "/api/alerts/mail/")
 # metered guest POSTs: path prefix -> quota kind. Context and the intelligence
 # panel fire automatically alongside these, so they are not counted twice.
 _GUEST_METERED = (("/api/x/refresh", "x"), ("/api/npro/open", "ai"),
@@ -234,6 +237,10 @@ _GUEST_HTML = """<!DOCTYPE html>
   .err{color:#FF8A8A;font-size:13px;margin-top:10px;min-height:16px}.note{font-size:12.5px;color:#8C9AB0;margin-top:14px;line-height:1.5}
   .code{font-family:Consolas,Menlo,monospace;font-size:24px;letter-spacing:.3em;text-align:center}
   .hidden{display:none}.link{background:none;color:#B3BFD0;font-weight:500;font-size:13px;margin-top:10px;padding:0}.link:hover{background:none;color:#EEF1F6}
+  .ask{margin-top:18px;background:#0A101B;border:1px solid #2A384D;border-radius:12px;padding:13px 14px}
+  .ask label{display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;color:#EEF1F6;font-size:13.5px;line-height:1.45}
+  .ask input{width:17px;height:17px;flex:0 0 auto;margin:1px 0 0;accent-color:#E5383B;cursor:pointer}
+  .ask p{margin:7px 0 0 27px;font-size:12px;color:#8C9AB0;line-height:1.5}
 </style></head>
 <body>
 <div class="card">
@@ -252,6 +259,10 @@ _GUEST_HTML = """<!DOCTYPE html>
   <form id="f2" class="hidden">
     <p class="sub" id="sent"></p>
     <label>6-digit code</label><input id="code" class="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required>
+    <div class="ask">
+      <label><input type="checkbox" id="alerts"><span>Email me breaking alerts</span></label>
+      <p>When Echo spots a major story on the wires, it emails you — the headline, how many outlets have it, and why it was flagged. A few a week at most, and every one has a one-click stop link.</p>
+    </div>
     <button id="b2" type="submit">Enter Echo</button>
     <div id="e2" class="err"></div>
     <button type="button" class="link" id="again">Didn't get it? Send another code</button>
@@ -270,7 +281,7 @@ $('f1').onsubmit=async e=>{e.preventDefault();$('e1').textContent='';$('b1').dis
   if(d.dev_code){$('code').value=d.dev_code;}
   $('f1').classList.add('hidden');$('f2').classList.remove('hidden');$('code').focus();};
 $('f2').onsubmit=async e=>{e.preventDefault();$('e2').textContent='';$('b2').disabled=true;
-  const {ok,d}=await post('/api/guest/verify',{email:$('email').value,code:$('code').value});
+  const {ok,d}=await post('/api/guest/verify',{email:$('email').value,code:$('code').value,alerts:$('alerts').checked});
   $('b2').disabled=false;
   if(!ok){$('e2').textContent=d.error||'Wrong code.';$('code').select();return;}
   location.href='/?in='+Date.now()+'#stories';};
@@ -308,7 +319,8 @@ def guest_request(request: Request, tasks: BackgroundTasks, payload: dict = Body
 def guest_verify(request: Request, payload: dict = Body(...)):
     try:
         visitor = guest.verify_code(payload.get("email", ""), payload.get("code", ""),
-                                    request.headers.get("user-agent", ""))
+                                    request.headers.get("user-agent", ""),
+                                    alerts=bool(payload.get("alerts")))
     except guest.GuestError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     resp = JSONResponse({"ok": True, "name": visitor.get("name", "")})
@@ -395,6 +407,66 @@ def tweets(limit: int = 40):
 def news_sources():
     from app.news.sources import load_sources
     return load_sources(active_only=False)
+
+
+_UNSUB_PAGE = """<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo | Breaking alerts</title>
+<style>
+  body{{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       background:#05080F;color:#EEF1F6;font-family:-apple-system,Segoe UI,Arial,sans-serif}}
+  .card{{background:#0E1624;border:1px solid #1B2636;border-radius:18px;padding:34px;
+         width:420px;max-width:calc(100vw - 32px);box-sizing:border-box}}
+  .brand{{display:flex;align-items:center;gap:10px;margin-bottom:16px}}
+  .brand i{{width:11px;height:11px;border-radius:50%;background:#E5383B;display:inline-block}}
+  .brand b{{font-size:26px;font-weight:500;letter-spacing:-.02em}}
+  h1{{font-size:18px;margin:0 0 10px;font-weight:600}}
+  p{{font-size:13.5px;line-height:1.6;color:#8C9AB0;margin:0 0 10px}}
+  a{{color:#B3BFD0}}
+</style></head>
+<body><div class="card">
+  <div class="brand"><i></i><b>Echo</b></div>
+  <h1>{heading}</h1>
+  <p>{body}</p>
+</div></body></html>"""
+
+
+@app.get("/api/alerts/unsubscribe", response_class=HTMLResponse)
+def alerts_unsubscribe(e: str = "", t: str = ""):
+    """One click from the email, no login. The token is signed, so a stranger
+    cannot unsubscribe somebody else by guessing their address."""
+    from app import alerts_mail
+    if alerts_mail.unsubscribe(e, t):
+        return _UNSUB_PAGE.format(
+            heading="Breaking alerts are off",
+            body="You won't get any more breaking-news emails from Echo. "
+                 "Nothing else changes — demo access still works the same way.")
+    return _UNSUB_PAGE.format(
+        heading="That link didn't work",
+        body="It may have been truncated by your mail client. Reply to the alert "
+             "and Gautam will take you off the list.")
+
+
+@app.get("/api/alerts/mail/preview", response_class=HTMLResponse)
+def alerts_mail_preview(request: Request):
+    """The breaking alert exactly as it would arrive, built from whatever is
+    currently over the bar — a way to check the email without waiting for news.
+    Editor only (listed in _GUEST_BLOCK)."""
+    from datetime import datetime, timezone
+    from app import alerts_mail
+    now = datetime.now(timezone.utc)
+    rows = alerts_mail.candidates(now)
+    if not rows:
+        return _UNSUB_PAGE.format(
+            heading="Nothing over the bar right now",
+            body=f"No signal in the last {alerts_mail.MAX_AGE_MIN} minutes has "
+                 f"reached urgency {alerts_mail.MAIL_FLOOR} with "
+                 f"{alerts_mail.MIN_OUTLETS}+ outlets, so there is no alert to show. "
+                 "That is the normal state — the bar is set high on purpose.")
+    lead, *others = [alerts_mail._prepare(r, now) for r in rows]
+    _, html = alerts_mail.build(lead, others, now,
+                                unsub=alerts_mail.unsub_link("you@example.com"))
+    return html
 
 
 @app.get("/api/alerts/feed")

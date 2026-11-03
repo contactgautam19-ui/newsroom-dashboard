@@ -200,9 +200,14 @@ def request_code(name: str, email: str, org: str, source: str, user_agent: str) 
     raise GuestError("Couldn't send the code just now. Please try again in a minute.")
 
 
-def verify_code(email: str, code: str, user_agent: str) -> dict:
+def verify_code(email: str, code: str, user_agent: str, alerts: bool = False) -> dict:
     """Check the code; on success mark the visitor verified and notify the editor.
-    Returns the visitor row as a dict."""
+    Returns the visitor row as a dict.
+
+    `alerts` is the visitor's answer to the breaking-alerts question on the
+    login screen. It is recorded here rather than later because this is the one
+    moment we know the address is real — they just read a code sent to it.
+    """
     email = (email or "").strip().lower()
     code = re.sub(r"\D", "", code or "")
     if not _EMAIL_RE.match(email) or len(code) != 6:
@@ -225,9 +230,16 @@ def verify_code(email: str, code: str, user_agent: str) -> dict:
         con.execute(
             "UPDATE guest_visitors SET verified = 1, visits = visits + 1, last_seen = ?, user_agent = ? "
             "WHERE email = ?", (now.isoformat(), (user_agent or "")[:300], email))
+        # Only ever written on a yes. A visitor who leaves the box unticked on a
+        # later sitting is not unsubscribing — that is what the link in the
+        # email is for — so a blank answer must not silently undo a previous one.
+        if alerts:
+            con.execute(
+                "UPDATE guest_visitors SET alerts = 1, alerts_at = ? WHERE email = ?",
+                (now.isoformat(), email))
         visitor = con.execute(
-            "SELECT email, name, org, source, first_seen, last_seen, visits FROM guest_visitors WHERE email = ?",
-            (email,)).fetchone()
+            "SELECT email, name, org, source, first_seen, last_seen, visits, alerts "
+            "FROM guest_visitors WHERE email = ?", (email,)).fetchone()
     visitor = dict(visitor) if visitor else {"email": email, "name": "", "org": "", "source": "", "visits": 1}
     _notify_editor(visitor)
     return visitor
@@ -236,7 +248,7 @@ def verify_code(email: str, code: str, user_agent: str) -> dict:
 def list_visitors(limit: int = 100) -> list[dict]:
     with db.connect() as con:
         rows = con.execute(
-            "SELECT email, name, org, source, first_seen, last_seen, visits, verified "
+            "SELECT email, name, org, source, first_seen, last_seen, visits, verified, alerts "
             "FROM guest_visitors ORDER BY last_seen DESC LIMIT ?", (limit,)).fetchall()
     return [dict(r) for r in rows]
 
@@ -274,6 +286,7 @@ def _notify_editor(v: dict) -> None:
     <tr><td style="color:#888;padding:3px 14px 3px 0">Came from</td><td>{v.get('source') or 'direct'}</td></tr>
     <tr><td style="color:#888;padding:3px 14px 3px 0">Visits</td><td>{v.get('visits', 1)}</td></tr>
     <tr><td style="color:#888;padding:3px 14px 3px 0">When</td><td>{when}</td></tr>
+    <tr><td style="color:#888;padding:3px 14px 3px 0">Breaking alerts</td><td>{'asked for them' if v.get('alerts') else 'no'}</td></tr>
   </table>
   <p style="font-size:13px;color:#888;margin:18px 0 0">Demo sessions last {SESSION_MINUTES} minutes with metered X and N-Pro use. The full list is on the Ops desk.</p>
 </div>"""

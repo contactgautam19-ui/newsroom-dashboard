@@ -252,6 +252,17 @@ MIGRATIONS = [
     # broadcast evidence (ocr = player OCR, x = channel's aired-story post),
     # while title/web rows keep feeding alerts and rival-coverage matching
     "ALTER TABLE live_onair ADD COLUMN source TEXT NOT NULL DEFAULT 'title'",
+    # breaking-alert emails (2026-11): a signal is emailed at most once, so the
+    # flag lives on the signal rather than in a separate log
+    "ALTER TABLE fast_signals ADD COLUMN alerted INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE fast_signals ADD COLUMN alerted_at TEXT",
+    # what it scored when we mailed it, so a story that was a footnote and
+    # becomes the lead can earn a second email without every climb sending one
+    "ALTER TABLE fast_signals ADD COLUMN alerted_urgency INTEGER NOT NULL DEFAULT 0",
+    # who asked for those emails. Guests opt in at the login screen; the column
+    # is the consent record, and alerts_at is when they gave it.
+    "ALTER TABLE guest_visitors ADD COLUMN alerts INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE guest_visitors ADD COLUMN alerts_at TEXT",
 ]
 
 
