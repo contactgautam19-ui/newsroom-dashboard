@@ -66,7 +66,19 @@ _STOP = set(
     "the a an and or of in on to for with at by from as is are was be after amid "
     "over his her their its says say said new what why how who when where day "
     "days ahead against former orders order amid blow big top live watch news "
-    "video update updates latest today this that will can not out now".split())
+    "video update updates latest today this that will can not out now "
+    # words from an instruction rather than a story. Without these, "Find
+    # articles on this. There have been reports on Deccan Herald…" searched as
+    # "Find articles There have been" and returned whatever matched.
+    "find get pull fetch show give send write draft build make create prepare "
+    "article articles report reports reporting story stories script package "
+    "explainer copy piece rundown summary brief please need want me my our "
+    "there have has been etc form such able understand common man".split())
+
+# A query with nothing distinctive left is not a thin query, it is not a query.
+# Returning [] sends the desk a straight "which story?" instead of a plausible
+# list of unrelated articles, which is the more dangerous failure.
+_MIN_SUBJECT_WORDS = 2
 
 
 def _raw_search(query: str, limit: int = 30) -> list[dict]:
@@ -130,6 +142,8 @@ def search_news(query: str, limit: int = 8, recent_days: int | None = RECENT_DAY
         return (_newest_first(items) if "when:" in query else items)[:limit]
 
     head, terms = _headline(query), _key_terms(query)
+    if len(terms.split()) < _MIN_SUBJECT_WORDS:
+        return []
     window = f" when:{recent_days}d"
     items = _newest_first(_raw_search(head + window))
     if len(items) < 3 and terms and terms.lower() != head.lower():

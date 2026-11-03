@@ -48,6 +48,9 @@ FAST_WINDOW_MIN = 90
 ALERT_FLOOR = 45
 PROMOTE_FLOOR = 62
 MAX_PROMOTIONS = 4        # enrichment budget per scan
+# A separate budget for watchlist stories, so following a running story can
+# never crowd out the strongest breaking news of the same scan.
+MAX_WATCH_PROMOTIONS = 3
 
 # Pull more per feed than the ranking cycle does. Corroboration is the main
 # urgency signal, and a fast-moving outlet pushes a story past position 5 of
@@ -66,6 +69,23 @@ _SOFT_RE = re.compile(
     r"\b(arrested|detained|resigns?|quits?|sacked|verdict|convicted|"
     r"acquitted|raid(?:s|ed)?|summoned|booked|injured|hospitalised|"
     r"evacuat\w*|rescued|suspended|banned|recalled|grounded)\b", re.I)
+# A political row is an event too, and it does not speak in the vocabulary
+# above. The Karnataka sting story of 1-3 Nov 2026 ran for three days across
+# seven outlets while every headline on it — "dares police to take action",
+# "masterminded release of sting video", "questions SIT delay" — carried no
+# casualty word and no enforcement word, so it scored 48 and never crossed the
+# promote floor. These are the verbs an allegation story actually moves on.
+_POLITICAL_RE = re.compile(
+    r"\b(sting (?:operation|video|op)|accuses?|accused of|alleges?|allegation|"
+    r"masterminded|conspir\w+|defamation|fir against|complaint against|"
+    r"sit (?:probe|inquiry|delay)|probe (?:ordered|sought|demanded)|"
+    r"inquiry ordered|notice (?:to|issued to)|summons|chargesheet|"
+    r"resignation (?:demand|sought|call)|no-confidence|floor test|"
+    r"horse-?trading|poaching|audio (?:clip|tape)|video (?:clip|tape) surfaces?|"
+    r"leaked (?:audio|video|tape|letter|report)|call records?|"
+    r"dares|hits? out at|slams? govern\w+|cornered|"
+    r"questions? (?:delay|silence|inaction)|denies? (?:charges?|allegations?))\b",
+    re.I)
 # Markers that a headline is commentary about an event, not the event
 _ANALYSIS_RE = re.compile(
     r"\b(explained|explainer|analysis|opinion|editorial|what we know|"
@@ -121,6 +141,10 @@ def urgency(raw, outlets: int, now: datetime) -> tuple[int, list[str]]:
         points += 22; why.append("casualty or incident wording")
     elif _SOFT_RE.search(title):
         points += 12; why.append("enforcement or official-action wording")
+    elif _POLITICAL_RE.search(title):
+        # Below the enforcement tier on purpose: an allegation is a claim, not
+        # a confirmed act, and corroboration still has to carry it over the bar.
+        points += 10; why.append("political allegation or counter-allegation")
 
     # 4. Where it came from. An Indian outlet high in the source matrix filing
     #    this is worth more to an Indian desk than a foreign wire's version.
@@ -217,6 +241,9 @@ def run_fast_scan(promote: bool = True) -> dict:
     scored.sort(key=lambda row: -row[0])
 
     raised, promoted = [], []
+    from app.news import tracker as tracker_mod
+    watch_sigs = tracker_mod.watch_signatures() if promote else []
+    watch_count = 0
     with db.connect() as con:
         for score, outlets, why, key, raw in scored:
             on_board = _on_board(con, raw.title)
@@ -246,9 +273,18 @@ def run_fast_scan(promote: bool = True) -> dict:
             # Promotion: pull the strongest ones onto the board now, through
             # the ordinary enrich -> score -> guardrail path so they are
             # indistinguishable from stories the full cycle found.
+            #
+            # A storyline on the desk watchlist comes through the same path
+            # without having to clear the urgency bar. It is scored honestly
+            # once it is there, so it may well rank low — the point is that an
+            # editor who said "follow this" never has to find it missing.
             already_promoted = bool(existing and existing["promoted"])
+            watch_label = tracker_mod.watch_hit(raw.title, watch_sigs)
+            over_bar = score >= PROMOTE_FLOOR
+            budget = (len(promoted) < MAX_PROMOTIONS if over_bar
+                      else watch_count < MAX_WATCH_PROMOTIONS)
             if (promote and not on_board and not already_promoted
-                    and score >= PROMOTE_FLOOR and len(promoted) < MAX_PROMOTIONS):
+                    and (over_bar or watch_label) and budget):
                 try:
                     story = enrich_mod.enrich(raw)
                     story.sources = sorted(
@@ -262,8 +298,14 @@ def run_fast_scan(promote: bool = True) -> dict:
                     con.execute(
                         "UPDATE fast_signals SET promoted = 1, story_id = ? "
                         "WHERE signal_key = ?", (story_id, key))
+                    if watch_label:
+                        con.execute("UPDATE stories SET watched = 1 WHERE id = ?",
+                                    (story_id,))
+                        if not over_bar:
+                            watch_count += 1
                     promoted.append({"title": raw.title, "story_id": story_id,
-                                     "score": sc["total"], "new": is_new})
+                                     "score": sc["total"], "new": is_new,
+                                     "watched": watch_label or None})
                 except Exception as exc:
                     # A story that cannot be enriched still stands as an alert.
                     log.warning("fast promote failed for %r: %s", raw.title[:60], exc)

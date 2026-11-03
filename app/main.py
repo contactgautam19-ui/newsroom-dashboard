@@ -1018,13 +1018,17 @@ async def npro_chat(payload: dict = Body(...)):
     desk_q = engine.is_desk_question(query)
     history = [t.model_dump() for t in req.history]
     retrieved: list = []
-    if not desk_q:
+    # What the editor typed is an instruction; what we search for is the story.
+    # "Find articles on this" means the topic already in play, not those words.
+    topic = "" if desk_q else engine.search_topic(query, req.topic)
+    if topic:
         retrieved = await loop.run_in_executor(
-            None, lambda: retrieval.search_news(query))
+            None, lambda: retrieval.search_news(topic))
     answer = await loop.run_in_executor(
-        None, lambda: engine.editorial_answer(query, retrieved, req.topic, history=history))
+        None, lambda: engine.editorial_answer(query, retrieved, topic or req.topic,
+                                              history=history))
     return {"mode": "desk" if desk_q else "story", "answer": answer,
-            "topic": None if desk_q else query, "retrieved": retrieved,
+            "topic": None if desk_q else (topic or None), "retrieved": retrieved,
             "has_key": engine.has_key()}
 
 

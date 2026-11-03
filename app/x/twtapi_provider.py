@@ -166,8 +166,45 @@ class TwtAPIProvider(XProvider):
         log.error("unrecognised TwtAPI payload shape; sample saved to %s", sample)
         return tweets
 
+    @staticmethod
+    def _column_slice(column: str, members: list[dict]) -> list[dict]:
+        """The handles to poll for one column this scan: a fixed high-trust
+        core, then a window that advances through the rest each scan."""
+        from app import settings_store
+        per = max(1, config.X_HANDLES_PER_COLUMN)
+        ranked = sorted(members, key=lambda h: (-h["trust_score"], h["handle"]))
+        if len(ranked) <= per:
+            return ranked
+        core_n = max(1, per // 2)
+        core, rest = ranked[:core_n], ranked[core_n:]
+        slots = per - core_n
+        key = f"x_rotate_{column}"
+        try:
+            cursor = int(settings_store.get_setting(key, "0") or 0)
+        except (TypeError, ValueError):
+            cursor = 0
+        picked = [rest[(cursor + i) % len(rest)] for i in range(min(slots, len(rest)))]
+        try:
+            settings_store.set_setting(key, str((cursor + len(picked)) % len(rest)))
+        except Exception as exc:          # a cursor that will not save is not fatal
+            log.warning("could not advance rotation for column %s: %s", column, exc)
+        return core + picked
+
     def fetch_new_tweets(self, handles: list[dict]) -> list[Tweet]:
-        """One Search call per column over its top-trust handles."""
+        """One Search call per column: the core handles plus a rotating share.
+
+        Taking the top N by trust every time meant the same 59 of 233 handles
+        were polled forever and the other 174 never once — among them every
+        regional-language channel on the roster. Column B had 109 handles
+        competing for 20 slots at a trust cutoff of 80, so TV9 Kannada, Public
+        TV, Prajavani and Vijaya Karnataka were unreachable by construction,
+        and a Karnataka story could not surface here however hard it ran.
+
+        So half the slots stay fixed on the highest-trust handles, which are
+        the ones worth checking every few minutes, and the rest rotate through
+        everyone else. Every handle on the roster is now reached within a
+        predictable number of scans instead of never.
+        """
         handle_map = {h["handle"].lstrip("@").lower(): h for h in handles}
         by_column: dict[str, list[dict]] = {}
         for h in handles:
@@ -176,8 +213,7 @@ class TwtAPIProvider(XProvider):
         collected: list[Tweet] = []
         errors: list[str] = []
         for column in sorted(by_column):
-            top = sorted(by_column[column],
-                         key=lambda h: -h["trust_score"])[: config.X_HANDLES_PER_COLUMN]
+            top = self._column_slice(column, by_column[column])
             query = " OR ".join(f"from:{h['handle'].lstrip('@')}" for h in top)
             try:
                 payload = self._get("Search", {

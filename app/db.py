@@ -263,6 +263,15 @@ MIGRATIONS = [
     # is the consent record, and alerts_at is when they gave it.
     "ALTER TABLE guest_visitors ADD COLUMN alerts INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE guest_visitors ADD COLUMN alerts_at TEXT",
+    # Desk watchlist (2026-11): a storyline an editor has named is a stronger
+    # statement of news value than any wording heuristic, so a signal matching
+    # one reaches the board whatever its urgency score. The Karnataka sting row
+    # was detected at urgency 48 against a promote floor of 62 and sat on the
+    # Alerts page for three days while seven outlets ran it.
+    "ALTER TABLE tracked_stories ADD COLUMN watch INTEGER NOT NULL DEFAULT 1",
+    # how the story reached the board, so a watched story is never mistaken for
+    # one the ranking found on its own merits
+    "ALTER TABLE stories ADD COLUMN watched INTEGER NOT NULL DEFAULT 0",
 ]
 
 

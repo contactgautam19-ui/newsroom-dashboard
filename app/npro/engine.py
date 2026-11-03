@@ -368,6 +368,66 @@ def latest_keyword(query: str) -> str | None:
     return kw if 1 < len(kw) <= 60 else None
 
 
+# ── what to actually search for ────────────────────────────────────────────
+# An editor types instructions, not search terms. "Find articles on this" and
+# "give me the story so far" are about whatever is already on screen, and
+# searching the sentence itself returns whatever the search engine makes of its
+# stopwords: on 3 November "Find articles on this. There have been reports on
+# Deccan Herald, Indian Express, etc." reduced to the query "Find articles
+# There have been" and came back with car finance, the Texas midterms and a
+# film feature, for a question about a Karnataka sting row.
+_POINTS_BACK = re.compile(
+    r"\b(on|about|for|regarding) (this|that|it|the above|the same)\b|"
+    r"\b(this|that) (story|topic|controvers\w+|issue|matter|case|row|one)\b|"
+    r"^\s*(find|get|pull|fetch|dig up|look up|search)\b.{0,40}\b(this|that|it)\b",
+    re.IGNORECASE)
+# Scaffolding an instruction is wrapped in, stripped before judging what is left.
+_SCAFFOLD = re.compile(
+    r"^\s*(?:please\s+)?(?:can you\s+|could you\s+|i (?:want|need)\s+(?:you to\s+)?)?"
+    r"(?:find|get|pull|fetch|show|give|send|write|draft|build|make|create|do|"
+    r"prepare|put together)\s+(?:me\s+)?(?:a|an|the|some|all)?\s*"
+    r"(?:articles?|reports?|reporting|stories|story|script|package|explainer|"
+    r"copy|piece|rundown|summary|brief)?\s*(?:on|about|for|of)?\s*",
+    re.IGNORECASE)
+_TRAILING_META = re.compile(
+    r"\b(there (?:have|has) been (?:reports?|coverage|articles?)[^.]*\.?|"
+    r"etc\.?|in the form of[^.]*|explained[^.]*|"
+    r"so (?:that )?(?:the )?common man[^.]*)", re.IGNORECASE)
+# Words that carry no search value on their own: if nothing else survives, the
+# sentence was pure instruction and there is nothing here to look up.
+_NON_SUBJECT = set(
+    "find get pull fetch show give send write draft build make create do article "
+    "articles report reports reporting story stories script package explainer "
+    "copy piece rundown summary brief news latest this that these those it the "
+    "a an and or of on in to for with about please need want me my our us some "
+    "all more other another same above form way such able understand common man "
+    "there have has been etc deccan herald indian express hindu times india "
+    "today ndtv news18 scroll quint wire".split())
+
+
+def search_topic(query: str, prior_topic: str = "") -> str:
+    """The thing to search for, given what the editor typed.
+
+    Returns the prior topic when the sentence is an instruction pointing back
+    at the story already under discussion, the cleaned sentence when it names a
+    story itself, and "" when it is an instruction with no subject anywhere —
+    in which case the desk is asked what story is meant, rather than being
+    handed whatever a nonsense query returned.
+    """
+    q = (query or "").strip()
+    prior = (prior_topic or "").strip()
+    if not q:
+        return prior
+    if _POINTS_BACK.search(q) and prior:
+        return prior
+    stripped = _TRAILING_META.sub(" ", _SCAFFOLD.sub("", q)).strip(" .,:;?!-\"'")
+    subject = [w for w in re.findall(r"[\w'-]+", stripped)
+               if w.lower() not in _NON_SUBJECT and len(w) > 2]
+    if len(subject) < 2:
+        return prior            # "" when there is no prior topic either
+    return stripped or prior
+
+
 def past_hour_brief(keyword: str, items: list[dict], widened: bool = False) -> str:
     """Deterministic 'past hour' headline pull for a keyword: the freshest 5
     headlines with their age, no LLM needed. ``widened`` means nothing was

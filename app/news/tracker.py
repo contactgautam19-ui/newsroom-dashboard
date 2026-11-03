@@ -322,6 +322,74 @@ def check_all() -> dict:
     return {"tracked": len(rows), "new": sum(results.values()), "per_story": results}
 
 
+def watch_signatures() -> list[tuple[set, str]]:
+    """Token signatures of the storylines the desk has asked to follow.
+
+    A storyline an editor has named by hand is a far stronger statement of news
+    value than any wording rule, so the fast lane lets a signal matching one
+    onto the board whatever it scored. It is still scored honestly once there,
+    which means a watched story can sit low on the board — present and
+    arguable, rather than absent.
+    """
+    from app.news.ingest import _sig_tokens
+    out: list[tuple[set, str]] = []
+    try:
+        with db.connect() as con:
+            rows = con.execute(
+                "SELECT label, query FROM tracked_stories "
+                "WHERE active = 1 AND watch = 1").fetchall()
+    except Exception as exc:              # a missing column must not stop a scan
+        log.warning("watch signatures unavailable: %s", exc)
+        return out
+    for r in rows:
+        # label and query together: the label is what the editor typed, the
+        # query carries the names lifted off the headline it was started from.
+        tokens = _sig_tokens(f"{r['label'] or ''} {r['query'] or ''}")
+        if tokens:
+            out.append((tokens, r["label"] or r["query"]))
+    return out
+
+
+# Words too broad to identify a storyline on their own. A watch on a Karnataka
+# row must not swallow every story filed from the state, and "police" or
+# "minister" appear in half the board on any given day.
+_BROAD = set("""india indian bharat karnataka bengaluru bangalore delhi mumbai
+chennai hyderabad kolkata kerala tamil nadu telangana andhra pradesh maharashtra
+gujarat punjab haryana bihar bengal assam odisha rajasthan madhya uttar
+government govt police court high supreme tribunal minister ministry chief
+union state states centre central party congress bjp jds dmk aiadmk tmc
+case probe inquiry report reports news today latest video audio row issue
+matter people man woman official officials leader leaders party""".split())
+
+
+def watch_hit(title: str, signatures: list[tuple[set, str]]) -> str:
+    """The watched storyline this headline belongs to, or "".
+
+    Deliberately more generous than the dedup matcher. That one needs two
+    shared significant words because a wrong merge hides a story; here an
+    editor has named the storyline by hand, so one distinctive name is enough
+    — a headline reading only "Kumaraswamy dares police to act" shares nothing
+    with a label built around Siddaramaiah, and missing it is the whole fault
+    being fixed. Broad words never match alone, so a Karnataka watch does not
+    pull in the state's milk price.
+    """
+    if not signatures:
+        return ""
+    from app.news.ingest import _sig_tokens
+    tokens = _sig_tokens(title or "")
+    if not tokens:
+        return ""
+    for seen, label in signatures:
+        shared = tokens & seen
+        if not shared:
+            continue
+        if any(t not in _BROAD and len(t) >= 5 for t in shared):
+            return label
+        if len(shared) >= 2:
+            return label
+    return ""
+
+
 def _shape(row: dict) -> dict:
     row = dict(row)
     row["kind_labels"] = KIND_LABELS
