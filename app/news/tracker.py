@@ -350,18 +350,6 @@ def watch_signatures() -> list[tuple[set, str]]:
     return out
 
 
-# Words too broad to identify a storyline on their own. A watch on a Karnataka
-# row must not swallow every story filed from the state, and "police" or
-# "minister" appear in half the board on any given day.
-_BROAD = set("""india indian bharat karnataka bengaluru bangalore delhi mumbai
-chennai hyderabad kolkata kerala tamil nadu telangana andhra pradesh maharashtra
-gujarat punjab haryana bihar bengal assam odisha rajasthan madhya uttar
-government govt police court high supreme tribunal minister ministry chief
-union state states centre central party congress bjp jds dmk aiadmk tmc
-case probe inquiry report reports news today latest video audio row issue
-matter people man woman official officials leader leaders party""".split())
-
-
 def watch_hit(title: str, signatures: list[tuple[set, str]]) -> str:
     """The watched storyline this headline belongs to, or "".
 
@@ -375,7 +363,7 @@ def watch_hit(title: str, signatures: list[tuple[set, str]]) -> str:
     """
     if not signatures:
         return ""
-    from app.news.ingest import _sig_tokens
+    from app.news.ingest import BROAD_TERMS, _sig_tokens
     tokens = _sig_tokens(title or "")
     if not tokens:
         return ""
@@ -383,7 +371,7 @@ def watch_hit(title: str, signatures: list[tuple[set, str]]) -> str:
         shared = tokens & seen
         if not shared:
             continue
-        if any(t not in _BROAD and len(t) >= 5 for t in shared):
+        if any(t not in BROAD_TERMS and len(t) >= 5 for t in shared):
             return label
         if len(shared) >= 2:
             return label

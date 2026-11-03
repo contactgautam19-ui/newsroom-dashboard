@@ -210,6 +210,22 @@ def _same_event(a: set[str], b: set[str]) -> bool:
     return any(w not in _COMMON_EVENT_WORDS for w in shared)
 
 
+# Words that cannot identify a storyline on their own, for the places that ask
+# "are these the same story?" with only one shared word to go on: the desk
+# watchlist (news/tracker.py) and N-Pro's context switch (npro/engine.py).
+# A state name matches half the board on any given day — "Karnataka milk price
+# hike" and "Karnataka bus fare hike" share only Karnataka and are two stories.
+BROAD_TERMS = _COMMON_EVENT_WORDS | set("""
+india indian bharat karnataka bengaluru bangalore delhi mumbai chennai
+hyderabad kolkata pune ahmedabad lucknow jaipur patna bhopal kerala tamil nadu
+telangana andhra pradesh maharashtra gujarat punjab haryana bihar bengal assam
+odisha rajasthan madhya uttar jharkhand chhattisgarh goa manipur kashmir
+congress bjp jds dmk aiadmk tmc aap shiv sena ncp rjd
+today latest news story stories update updates video audio row issue matter
+people man woman men women year years month months day days
+""".split())
+
+
 def _collapse_duplicates(con) -> int:
     """Merge same-event stories already on the board into one row: keep the
     highest-scored take, fold the others' sources into it (so the survivor shows

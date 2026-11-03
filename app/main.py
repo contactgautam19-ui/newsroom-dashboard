@@ -447,6 +447,28 @@ def alerts_unsubscribe(e: str = "", t: str = ""):
              "and Gautam will take you off the list.")
 
 
+@app.get("/api/alerts/mail/enabled")
+def alerts_mail_enabled():
+    """Whether breaking alerts are being emailed. Editor only (_GUEST_BLOCK)."""
+    from app import alerts_mail
+    return {"enabled": alerts_mail.enabled()}
+
+
+@app.post("/api/alerts/mail/enabled")
+def alerts_mail_set_enabled(payload: dict = Body(...)):
+    """Turn breaking alert emails on or off.
+
+    Separate from the hourly brief on purpose: the two share one recipient
+    list, so before this the only way to stop the alerts was to stop the brief
+    as well. Read from the database on every scan, so it takes effect on the
+    next scan rather than on the next deploy.
+    """
+    from app import alerts_mail
+    on = bool(payload.get("enabled"))
+    alerts_mail.set_enabled(on)
+    return {"enabled": alerts_mail.enabled()}
+
+
 @app.get("/api/alerts/mail/preview", response_class=HTMLResponse)
 def alerts_mail_preview(request: Request):
     """The breaking alert exactly as it would arrive, built from whatever is
@@ -1027,8 +1049,15 @@ async def npro_chat(payload: dict = Body(...)):
     answer = await loop.run_in_executor(
         None, lambda: engine.editorial_answer(query, retrieved, topic or req.topic,
                                               history=history))
+    # A new subject is a context switch, not just a new answer. The console
+    # has a pinned story id, a reporter's note and a who/where/when on screen,
+    # all belonging to the previous story; carrying them into the next one
+    # would attach the wrong note to the wrong story and pin a script to the
+    # wrong people. Say so plainly and let the console swap them as one unit.
+    switched = bool(topic and req.topic and not engine.same_subject(topic, req.topic))
     return {"mode": "desk" if desk_q else "story", "answer": answer,
             "topic": None if desk_q else (topic or None), "retrieved": retrieved,
+            "topic_changed": switched, "previous_topic": req.topic if switched else None,
             "has_key": engine.has_key()}
 
 

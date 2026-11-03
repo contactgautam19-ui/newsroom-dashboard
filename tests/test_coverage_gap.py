@@ -113,6 +113,37 @@ def test_the_watchlist_does_not_swallow_unrelated_news():
         assert not tracker.watch_hit(title, WATCHING), title
 
 
+# --- 3b. N-Pro context: when is this still the same story? ----------------
+def test_the_same_story_keeps_its_context():
+    """A False here throws away the pinned story, the reporter's note and the
+    who/where/when, so it has to be right."""
+    for a, b in [
+        ("Kumaraswamy controversy", "Kumaraswamy sting video Siddaramaiah"),
+        ("Cyclone Murasu landfall Andhra", "Cyclone Murasu death toll rises"),
+        ("Vizag refinery fire", "Visakhapatnam HPCL refinery blast"),
+        ("Delhi Police protest", "Delhi Police protest: SOP demands raised"),
+        ("Karnataka milk price hike", "Nandini milk price hiked by Rs 8"),
+    ]:
+        assert engine.same_subject(a, b), (a, b)
+
+
+def test_a_different_story_is_a_context_switch():
+    """A True here silently attaches one story's reporter note and pinned
+    who/where/when to another story's script."""
+    for a, b in [
+        ("Kumaraswamy controversy", "Siddaramaiah sting op row"),
+        ("Cyclone Murasu landfall Andhra", "Kumaraswamy sting row"),
+        ("Karnataka milk price hike", "Karnataka bus fare hike"),
+        ("Bengaluru hotel electrocution", "Bengaluru traffic curbs"),
+    ]:
+        assert not engine.same_subject(a, b), (a, b)
+
+
+def test_an_empty_topic_is_not_a_switch():
+    assert engine.same_subject("", "")
+    assert not engine.same_subject("Cyclone Murasu", "")
+
+
 def test_a_broad_word_never_matches_on_its_own():
     """A watch naming a state must not pull in the whole state."""
     broad = [(_sig_tokens("Karnataka government policy"), "Karnataka")]

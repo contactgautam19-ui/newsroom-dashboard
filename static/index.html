@@ -162,8 +162,11 @@ tailwind.config = { theme: { extend: {
   <aside id="sidebar" class="hidden lg:flex flex-col w-[242px] shrink-0 bg-navy text-white fixed inset-y-0 left-0 z-30 px-4 py-5">
     <div class="px-2 mb-6">
       <div class="flex items-center gap-2.5">
-        <span class="w-[11px] h-[11px] rounded-full bg-brand" style="box-shadow:0 0 0 5px rgba(229,56,59,.18)"></span>
-        <span style="font-family:var(--f-display);font-size:26px;letter-spacing:-.02em">Echo</span>
+        <button onclick="Nav.home()" title="Back to the Story Desk"
+                class="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
+          <span class="w-[11px] h-[11px] rounded-full bg-brand" style="box-shadow:0 0 0 5px rgba(229,56,59,.18)"></span>
+          <span style="font-family:var(--f-display);font-size:26px;letter-spacing:-.02em">Echo</span>
+        </button>
         <button onclick="Nav.toggleSidebar()" class="lg:hidden ml-auto text-white/60 text-[18px]">✕</button>
       </div>
       <p class="text-[11.5px] leading-snug text-white/50 mt-2">Listens to social chatter, wire services and breaking news cycles.</p>
@@ -445,6 +448,9 @@ tailwind.config = { theme: { extend: {
         </div>
         <div class="ml-auto flex items-center gap-1.5">
           <button onclick="NPro.toggleIntel()" class="lg:hidden text-[12px] font-semibold border border-line rounded-lg px-3 py-1.5">Intel</button>
+          <button onclick="Nav.home()" title="Back to the Story Desk" class="text-sub hover:text-ink rounded-lg px-3 py-1.5 text-[13px] font-semibold border border-line flex items-center gap-1.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8M5 10v10h14V10"/></svg>
+            Home</button>
           <button onclick="NPro.close()" class="text-sub hover:text-ink rounded-lg px-3 py-1.5 text-[13px] font-semibold border border-line">✕ Close</button>
         </div>
       </header>

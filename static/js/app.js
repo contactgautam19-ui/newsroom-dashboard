@@ -69,6 +69,18 @@ const Nav = (() => {
     location.hash = name;
   }
 
+  // Home: out of whatever is open and back to the board. N-Pro, the story pack
+  // and the tracking modal each cover the whole screen and hide the sidebar,
+  // so from inside one of them there was no way back to the main page at all.
+  function home() {
+    ['npro', 'pack-overlay', 'track-overlay'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    });
+    document.body.style.overflow = '';
+    go('stories');
+  }
+
   function toggleSidebar() {
     const sb = document.getElementById('sidebar');
     const bd = document.getElementById('sidebar-backdrop');
@@ -85,7 +97,7 @@ const Nav = (() => {
     document.getElementById('sidebar-backdrop').classList.add('hidden');
   }
 
-  return { go, toggleSidebar, get current() { return current; } };
+  return { go, home, toggleSidebar, get current() { return current; } };
 })();
 
 function setLive(state) {

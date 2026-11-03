@@ -78,6 +78,12 @@ EVENT_MEMORY_ROWS = 200
 
 _LAST_MAIL_KEY = "alert_mail_last"
 _HOUR_KEY = "alert_mail_hour"
+# The off switch. Editors and the hourly brief share one recipient list, so
+# there was no way to stop the breaking alerts without stopping the brief too.
+# This is checked in the database on every scan, which means switching it off
+# takes effect on the next scan rather than on the next deploy.
+_ENABLED_KEY = "alert_mail_enabled"
+_OFF = {"0", "off", "false", "no", "none"}
 
 # Content that is published on a schedule rather than because something
 # happened. The urgency score cannot see the difference: a market wrap carried
@@ -148,6 +154,17 @@ def unsubscribe(email: str, token: str) -> bool:
         con.execute("UPDATE guest_visitors SET alerts = 0 WHERE email = ?", (email,))
     log.info("alerts unsubscribed: %s", email)
     return True
+
+
+def enabled() -> bool:
+    """Whether breaking alerts may be emailed at all. On unless switched off."""
+    raw = (settings_store.get_setting(_ENABLED_KEY, "1") or "1").strip().lower()
+    return raw not in _OFF
+
+
+def set_enabled(on: bool) -> None:
+    settings_store.set_setting(_ENABLED_KEY, "1" if on else "0")
+    log.info("breaking alert mail %s", "enabled" if on else "disabled")
 
 
 def set_guest_alerts(email: str, on: bool) -> None:
@@ -479,6 +496,8 @@ def dispatch(now: datetime | None = None) -> dict:
     raising, so a mail problem can never cost us the scan that found the story.
     """
     now = now or datetime.now(timezone.utc)
+    if not enabled():
+        return {"sent": False, "reason": "breaking alerts are switched off"}
     rows = candidates(now)
     if not rows:
         return {"sent": False, "reason": "nothing over the bar"}

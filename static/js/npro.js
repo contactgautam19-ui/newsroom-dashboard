@@ -72,6 +72,34 @@ const NPro = (() => {
   function msgAI(html, bare) { clearTyping(); return bubble('ai', html, bare); }
   function msgUser(text) { return bubble('user', esc(text)); }
 
+  // A visible line in the thread when the window changes story, so the editor
+  // can see that the note, the pinned who/where/when and any script on screen
+  // belonged to the story above it and no longer apply.
+  function msgSwitch(from, to) {
+    const wrap = document.createElement('div');
+    wrap.className = 'fade-up flex items-center gap-3 my-4 text-[11.5px] text-sub';
+    wrap.innerHTML =
+      `<div class="flex-1 border-t border-line"></div>
+       <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-line bg-paper">
+         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg>
+         <span>Now on <b class="text-ink">${esc(to || 'a new story')}</b>${
+           from ? ` · left <span class="text-ink">${esc(from)}</span>` : ''}</span>
+       </div>
+       <div class="flex-1 border-t border-line"></div>`;
+    thread().appendChild(wrap);
+    scrollDown();
+  }
+
+  // Clear whatever script is on screen: it belongs to the story being left.
+  function clearScript() {
+    document.querySelectorAll('#npro-thread .npro-script').forEach(el => {
+      const card = el.closest('.fade-up');
+      if (card) card.remove(); else el.remove();
+    });
+    const live = document.querySelector('#npro-thread [data-live]');
+    if (live) { live.textContent = ''; live.classList.add('hidden'); }
+  }
+
   // Markdown-lite renderer: **bold** headers, "- " bullets, paragraph spacing.
   // The editorial engine emits this exact dialect; raw asterisks never show.
   function mdlite(text) {
@@ -703,7 +731,23 @@ const NPro = (() => {
     S.convo.push({ role: 'user', content: q });
     S.convo.push({ role: 'assistant', content: data.answer || '' });
     if (data.mode === 'story' && (data.retrieved || []).length) {
-      // a news topic: adopt it for retrieval/context and offer production
+      // A news topic: adopt it for retrieval/context and offer production.
+      //
+      // When it is a DIFFERENT story, everything story-scoped has to move
+      // with it. Previously only topic and retrieved were swapped, so the
+      // window kept the old story's id, reporter's note, who/where/when and
+      // script — and the next format button would have written the new story
+      // using the old story's note as its primary account, pinned to the old
+      // story's people. Swapped as one unit, and said out loud, because an
+      // editor who cannot see the switch cannot catch it going wrong.
+      if (data.topic_changed) {
+        S.storyId = null; S.note = null; S.triad = null; S.recordId = '';
+        S.lastScript = null; S.lastFormat = null; S.format = null;
+        S.params = {}; S.qIndex = 0; S.multiSel = new Set();
+        S.guests = []; S.pinning = null;
+        clearScript();
+        msgSwitch(data.previous_topic, data.topic);
+      }
       S.topic = data.topic || q;
       S.retrieved = data.retrieved;
       S.usedAngles = []; S.seenUrls = new Set(); S.seenTitles = [];

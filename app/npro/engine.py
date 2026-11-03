@@ -428,6 +428,29 @@ def search_topic(query: str, prior_topic: str = "") -> str:
     return stripped or prior
 
 
+def same_subject(a: str, b: str) -> bool:
+    """Whether two topics are about the same story.
+
+    Lenient on purpose. Saying "different" throws away the pinned story, the
+    reporter's note and the who/where/when, so it has to be wrong rarely: one
+    shared distinctive word is enough to count as the same thread, which keeps
+    "the Kumaraswamy controversy" and "Kumaraswamy sting video" together while
+    still separating them from a cyclone.
+    """
+    from app.news.ingest import BROAD_TERMS, _sig_tokens
+    ta, tb = _sig_tokens(a or ""), _sig_tokens(b or "")
+    if not ta or not tb:
+        return not (ta or tb)
+    shared = ta & tb
+    if any(t not in BROAD_TERMS and len(t) >= 5 for t in shared):
+        return True
+    # Only broad words in common: "Karnataka milk price hike" and "Karnataka
+    # bus fare hike" share a state and a verb and are two stories, while
+    # "Delhi Police protest" and "Delhi Police protest: SOP demands" share
+    # three and are one. Three is the line between them.
+    return len(shared) >= 3
+
+
 def past_hour_brief(keyword: str, items: list[dict], widened: bool = False) -> str:
     """Deterministic 'past hour' headline pull for a keyword: the freshest 5
     headlines with their age, no LLM needed. ``widened`` means nothing was
