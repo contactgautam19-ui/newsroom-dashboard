@@ -261,7 +261,7 @@ _GUEST_HTML = """<!DOCTYPE html>
     <label>6-digit code</label><input id="code" class="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required>
     <div class="ask">
       <label><input type="checkbox" id="alerts"><span>Email me breaking alerts</span></label>
-      <p>When Echo spots a major story on the wires, it emails you — the headline, how many outlets have it, and why it was flagged. A few a week at most, and every one has a one-click stop link.</p>
+      <p>When Echo spots a major story on the wires, it emails you — the headline, how many outlets have it, and why it was flagged. A few a day on a busy news cycle, and every one has a one-click stop link.</p>
     </div>
     <button id="b2" type="submit">Enter Echo</button>
     <div id="e2" class="err"></div>

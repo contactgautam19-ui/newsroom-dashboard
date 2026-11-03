@@ -43,6 +43,19 @@ ROUTINE = [
     "Top Headlines Today: Parliament session, cyclone watch",
     "Box Office Collection Day 4: film crosses Rs 100 crore",
     "Petrol diesel price today in Delhi, Mumbai, Chennai",
+    # mailed at urgency 100 on 2026-11-03: markets borrow the vocabulary of
+    # disasters, and "crash" let it through the escape hatch
+    "Silver prices crash ₹8,500/kg, gold drops ₹2,000/10g as US-Iran "
+    "tensions revive inflation fears; is more fall coming?",
+    "Gold drops Rs 2,000/10g on US jobs data",
+    "IPL 2027: BCCI announces new retention deadline, mini-auction date unchanged",
+    # a digest is never an event, however grim the stories it lists. This one
+    # mailed at urgency 99.
+    "HT Morning Brief Nov 3: Indian tourist killed in Nepal; rain alert in Nilgiris",
+    "Evening digest: blast in Kabul, three held in Pune",
+    "SBI Q2 results: Net profit rises 14% on-year to Rs 23,038 crore",
+    "Biratnagar Kings vs Janakpur Bolts",
+    "Hardik Pandya For Arshdeep Singh? MI, PBKS Near IPL Trade Deal: Report",
 ]
 
 EVENTS = [
@@ -56,6 +69,8 @@ EVENTS = [
     # the escape hatch: a market word in a headline about something happening
     "Sensex-listed firm chairman arrested in fraud case",
     "Trading halted after blast near BSE building, 3 injured",
+    # a fixture-shaped headline that is an event
+    "India vs Pakistan talks collapse after border firing",
 ]
 
 
@@ -82,6 +97,35 @@ def test_shortlist_collapses_the_same_death_reported_four_ways():
     assert len(kept) == 2, titles
     assert "Sanjay Gupta" in titles[0]
     assert "Vizag" in titles[1]
+
+
+def test_an_already_mailed_event_does_not_lead_a_second_email():
+    """The bug that sent five alerts for one killing off Oman: each outlet's
+    wording is its own unmailed row."""
+    from app.news.ingest import _sig_tokens
+    mailed = [(_sig_tokens(
+        "Seafarer killed in attack on Indian-flagged cargo vessel 'Al Jusufi' "
+        "off Oman coast"), 86)]
+    rows = [
+        _signal("Indian Sailor Killed In Attack On Cargo Vessel 'Al Jusufi' "
+                "Off Oman Coast", urgency=84, key="variant"),
+        _signal("Cyclone Murasu landfall begins on Andhra coast",
+                urgency=84, key="other"),
+    ]
+    kept = [r["signal_key"] for r in alerts_mail._shortlist(rows, mailed)]
+    assert kept == ["other"], kept
+
+
+def test_a_mailed_event_returns_once_it_genuinely_escalates():
+    from app.news.ingest import _sig_tokens
+    mailed = [(_sig_tokens("Cyclone Murasu landfall begins on Andhra coast"), 77)]
+    climbed = _signal("Cyclone Murasu landfall: death toll rises to 30 in Andhra",
+                      urgency=77 + alerts_mail.ESCALATION, key="climbed")
+    crept = _signal("Cyclone Murasu landfall continues along Andhra coast",
+                    urgency=77 + alerts_mail.ESCALATION - 1, key="crept")
+    assert [r["signal_key"] for r in
+            alerts_mail._shortlist([climbed], mailed)] == ["climbed"]
+    assert alerts_mail._shortlist([crept], mailed) == []
 
 
 def test_shortlist_drops_routine_before_deduping():

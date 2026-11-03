@@ -12,6 +12,9 @@ Three things keep it from becoming noise an editor learns to ignore:
     not a story;
   * one email per signal, ever, recorded on the signal row itself, so a story
     that keeps climbing across scans does not keep mailing;
+  * one email per *event*, not per row. A signal key is a headline, and the
+    same killing reaches the table as five outlets' five headlines over an
+    hour; without this, each one is an unmailed row that leads its own email;
   * a gap between emails, so two scans ninety seconds apart batch into one
     message instead of two. A genuinely enormous story (OVERRIDE_URGENCY) skips
     that gap, because the whole point is latency.
@@ -55,13 +58,23 @@ MAX_AGE_MIN = 90
 
 MIN_GAP_SECONDS = 600       # batching window between emails
 OVERRIDE_URGENCY = 88       # big enough to ignore the gap
-MAX_PER_HOUR = 3            # hard ceiling, whatever the wires do
+# Hard ceiling, whatever the wires do. At 3 this was the binding constraint
+# rather than a safety net: on 2026-11-03 the queue above MAIL_FLOOR never ran
+# dry, so the cap alone set the volume at 22 emails in a shift, backfilling
+# with whatever ranked next. Indian wire volume means the floor, not the cap,
+# is the real lever -- see the floor/cap table in the commit message.
+MAX_PER_HOUR = 2
 ALSO_CROSSING = 3           # secondary stories listed under the lead
 MAX_GUEST_FANOUT = 25       # one SMTP send each; a scan must not stall on this
 # A signal already mailed may be mailed again only if it has climbed this far
 # since. A story that arrives as one outlet's line and becomes the day's lead
 # is worth a second email; one that drifts up three points is not.
 ESCALATION = 12
+# How long an event stays mailed. Long enough that a story cannot come back
+# round under another outlet's wording later in the same shift, short enough
+# that tomorrow's genuine development is not swallowed by yesterday's email.
+EVENT_MEMORY_HOURS = 8
+EVENT_MEMORY_ROWS = 200
 
 _LAST_MAIL_KEY = "alert_mail_last"
 _HOUR_KEY = "alert_mail_hour"
@@ -73,18 +86,40 @@ _HOUR_KEY = "alert_mail_hour"
 # Alerts page that is harmless clutter. In an inbox it is the thing that teaches
 # an editor the alerts are not worth opening, so it is barred from the mail
 # path only -- these stories still appear on screen and still rank normally.
-_ROUTINE_RE = re.compile(
-    r"\b(sensex|nifty|stock market|share price|closing bell|market (?:wrap|close|"
-    r"today|outlook)|bse|opening bell|rupee (?:vs|against)|gold (?:rate|price)|"
-    r"silver (?:rate|price)|petrol (?:and |)diesel price|fuel price|"
-    r"horoscope|rashifal|panchang|zodiac|numerology|tarot|"
+#
+# Formats that are never an event, whatever words appear inside them. These get
+# no escape hatch, because a digest is a list of other people's stories: "HT
+# Morning Brief Nov 3: Indian tourist killed in Nepal" mailed at urgency 99
+# when the hatch read "killed" from a story the brief was only summarising.
+_NEVER_RE = re.compile(
+    r"\b((?:morning|evening|afternoon|night|daily|weekly) (?:brief|briefing|"
+    r"digest|news|roundup|round-up|wrap|bulletin)|"
+    r"news (?:wrap|roundup|round-up|bulletin|digest|briefing)|"
+    r"top (?:headlines|stories|news)|headlines (?:today|of the day)|"
     r"daily (?:quiz|brief|digest|roundup)|word of the day|wordle|"
+    r"horoscope|rashifal|panchang|zodiac|numerology|tarot|"
     r"live score|scorecard|playing xi|fantasy (?:tips|xi)|dream11|"
-    r"match (?:preview|prediction|report)|pitch report|"
-    r"box office (?:collection|day \d)|ott release|weather forecast|"
-    r"top (?:headlines|stories|news)|news (?:wrap|roundup|bulletin)|"
-    r"morning (?:brief|digest|news)|evening (?:brief|digest)|"
-    r"recipe|skincare|weight loss|horoscope today)\b", re.I)
+    r"recipe|skincare|weight loss)\b", re.I)
+
+_ROUTINE_RE = re.compile(
+    r"\b(sensex|nifty|stock market|share prices?|closing bell|market (?:wrap|close|"
+    r"today|outlook)|bse|opening bell|rupee (?:vs|against)|"
+    # commodity moves arrive as "Silver prices crash" and "gold drops Rs 2,000",
+    # so the plural and the bare verb both have to be here
+    r"(?:gold|silver|bullion) (?:rate|price)s?(?: (?:crash(?:es)?|drops?|"
+    r"slumps?|surges?|jumps?|climbs?|rises?|falls?|gains?|slips?))?|"
+    r"(?:gold|silver) (?:crash(?:es)?|drops?|slumps?|surges?|jumps?|climbs?|"
+    r"rises?|falls?)|petrol (?:and |)diesel prices?|fuel prices?|"
+    # results season: an earnings line is a calendar entry, not an event
+    r"q[1-4] results|quarterly (?:results|earnings)|net profit|earnings call|"
+    r"revenue (?:rises|falls|up|down)|"
+    r"retention deadline|mini-?auction|player (?:retention|auction)|"
+    r"(?:ipl|bcci)[^.]{0,40}(?:trade deal|retention|auction)|"
+    # a fixture headline -- "Biratnagar Kings vs Janakpur Bolts" -- is a
+    # scheduled match. The escape hatch still rescues "India vs Pakistan talks
+    # collapse", because that one says something happened.
+    r"match (?:preview|prediction|report)|pitch report| vs |"
+    r"box office (?:collection|day \d)|ott release|weather forecast)\b", re.I)
 
 
 # --------------------------------------------------------------------------
@@ -350,21 +385,56 @@ def _is_routine(title: str) -> bool:
     "Sensex-listed firm chairman arrested in fraud case" is a story, and a
     keyword list without this escape hatch would silently swallow it. The
     incident vocabulary is fastlane's, so the two stay in step.
+
+    The escape hatch reads only what is left once the scheduled-content
+    phrasing is removed, because markets borrow the vocabulary of disasters:
+    "Silver prices crash" matched fastlane's word for a plane coming down and
+    mailed at urgency 100. "Sensex-listed firm chairman arrested" keeps its
+    incident word, because that word is not part of the market phrasing.
     """
-    if not _ROUTINE_RE.search(title or ""):
+    title = title or ""
+    if _NEVER_RE.search(title):
+        return True
+    if not _ROUTINE_RE.search(title):
         return False
     from app.news.fastlane import _HARD_RE, _SOFT_RE
-    return not (_HARD_RE.search(title) or _SOFT_RE.search(title))
+    rest = _ROUTINE_RE.sub(" ", title)
+    return not (_HARD_RE.search(rest) or _SOFT_RE.search(rest))
 
 
-def _shortlist(rows: list[dict]) -> list[dict]:
+def _mailed_events(now: datetime) -> list[tuple[set, int]]:
+    """Event signatures already mailed this shift, with the score they went out
+    at, so the same story cannot lead a second email under another outlet's
+    wording."""
+    from app.news.ingest import _sig_tokens
+    since = (now - timedelta(hours=EVENT_MEMORY_HOURS)).isoformat()
+    with db.connect() as con:
+        rows = con.execute(
+            "SELECT title, alerted_urgency FROM fast_signals "
+            "WHERE alerted = 1 AND alerted_at >= ? "
+            "ORDER BY alerted_at DESC LIMIT ?",
+            (since, EVENT_MEMORY_ROWS)).fetchall()
+    out: list[tuple[set, int]] = []
+    for row in rows:
+        tokens = _sig_tokens(row["title"] or "")
+        if len(tokens) >= 2:
+            out.append((tokens, int(row["alerted_urgency"] or 0)))
+    return out
+
+
+def _shortlist(rows: list[dict],
+               mailed: list[tuple[set, int]] | None = None) -> list[dict]:
     """Narrow scored signals to the ones worth an inbox: drop scheduled
-    content, then drop repeats of an event already kept.
+    content, then drop repeats of an event -- whether the repeat is in this
+    same batch or was already mailed earlier.
 
     The clusterer is title-based, so one death reaches the table as "dies at
-    57", "dies at 59" and "RIP" from three outlets. On the Alerts page that is
-    just repetition; in an email where the lead and the list underneath it are
-    the same story, it reads as though the system cannot tell them apart.
+    57", "dies at 59" and "RIP" from three outlets. Within one email that reads
+    as though the system cannot tell them apart. Across emails it is worse: each
+    variant is its own unmailed row, so one killing off Oman sent five separate
+    alerts in a morning. An already-mailed event therefore comes back only if
+    it has climbed ESCALATION beyond the score it went out at, which is a
+    developing story rather than another outlet filing the same one.
     """
     from app.news.ingest import _sig_tokens, _same_event
     kept: list[dict] = []
@@ -374,8 +444,13 @@ def _shortlist(rows: list[dict]) -> list[dict]:
         if _is_routine(title):
             continue
         tokens = _sig_tokens(title)
-        if len(tokens) >= 2 and any(_same_event(tokens, seen) for seen in signatures):
-            continue
+        if len(tokens) >= 2:
+            if any(_same_event(tokens, seen) for seen in signatures):
+                continue
+            urgency = int(row.get("urgency") or 0)
+            if any(_same_event(tokens, seen) and urgency < was + ESCALATION
+                   for seen, was in (mailed or [])):
+                continue
         signatures.append(tokens)
         kept.append(row)
     return kept
@@ -392,8 +467,9 @@ def candidates(now: datetime | None = None) -> list[dict]:
             "AND first_seen >= ? AND (alerted = 0 OR urgency >= alerted_urgency + ?) "
             "ORDER BY urgency DESC, first_seen DESC LIMIT ?",
             (MAIL_FLOOR, MIN_OUTLETS, since, ESCALATION,
-             (ALSO_CROSSING + 1) * 4)).fetchall()
-    return _shortlist(db.rows_to_dicts(rows))[:ALSO_CROSSING + 1]
+             (ALSO_CROSSING + 1) * 8)).fetchall()
+    return _shortlist(db.rows_to_dicts(rows),
+                      _mailed_events(now))[:ALSO_CROSSING + 1]
 
 
 def dispatch(now: datetime | None = None) -> dict:
