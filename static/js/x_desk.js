@@ -142,6 +142,27 @@ const XDesk = (() => {
     } else if (calls != null) {
       el.textContent = `${calls} API calls left this month`;
     }
+    // A refresh needs one call per column. If the account cannot cover them
+    // the button can only fail, so say so on the button rather than letting
+    // someone discover it mid-demo.
+    const known = [credits, calls].filter((v) => v != null);
+    if (known.length) spent(Math.min(...known) < COLUMNS);
+  }
+
+  function spent(isSpent) {
+    const btn = document.getElementById('x-refresh-btn');
+    if (!btn) return;
+    btn.dataset.spent = isSpent ? '1' : '';
+    btn.disabled = isSpent;
+    btn.classList.toggle('opacity-50', isSpent);
+    btn.classList.toggle('cursor-not-allowed', isSpent);
+    if (isSpent) {
+      btn.title = 'The X API account is out of credits — top up at twtapi.com';
+      btn.textContent = btn.dataset.label = '𝕏 out of credits';
+    } else if (btn.title) {
+      btn.title = '';
+      btn.textContent = btn.dataset.label = BTN_LABEL;
+    }
   }
 
   function note(text) {
@@ -151,6 +172,7 @@ const XDesk = (() => {
 
   // Demo guests get a small number of live pulls; show what is left.
   const BTN_LABEL = '𝕏 Refresh tweets';
+  const COLUMNS = 3;                    // one API call per stream column
   function guestPulls(left) {
     const btn = document.getElementById('x-refresh-btn');
     if (!btn || left == null) return;
@@ -181,7 +203,11 @@ const XDesk = (() => {
     } catch {
       btn.textContent = '𝕏 failed';
     } finally {
-      setTimeout(() => { btn.disabled = false; btn.textContent = btn.dataset.label || orig; }, 2500);
+      setTimeout(() => {
+        // a refresh that emptied the account leaves the button spent, not armed
+        btn.disabled = !!btn.dataset.spent;
+        btn.textContent = btn.dataset.label || orig;
+      }, 2500);
     }
   }
   document.getElementById('x-refresh-btn').addEventListener('click', refresh);

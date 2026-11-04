@@ -1276,6 +1276,12 @@ def x_top_signals():
 
 @app.get("/api/x/status")
 def x_status():
+    # last_status is per-instance memory, so a cold start knows nothing about
+    # the budget until someone spends a refresh finding out. The account
+    # endpoint is not a billed call, so ask it once and the desk can show the
+    # real position — and disable the button — before anyone clicks.
+    if pipeline.manual_only and config.TWT_API_KEY and not pipeline.twtapi.last_status:
+        pipeline.twtapi.account_status()
     return {"provider": config.X_PROVIDER, "layer": pipeline.active_layer,
             "manual_only": pipeline.manual_only,
             "key_configured": bool(config.TWT_API_KEY),
