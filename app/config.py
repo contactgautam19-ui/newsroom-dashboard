@@ -52,7 +52,10 @@ NEWS_RSS_URL = os.getenv(
 )
 STORIES_PER_CYCLE = _int("STORIES_PER_CYCLE", 5)
 
-X_PROVIDER = os.getenv("X_PROVIDER", "twtapi")   # twtapi = real tweets, sim = demo feed
+# twtapi / twitterapiio = real tweets, sim = demo feed. Whichever real vendor
+# is named goes first; the other follows as a fallback when its key is set, so
+# an exhausted balance or a dead vendor down-shifts instead of going dark.
+X_PROVIDER = os.getenv("X_PROVIDER", "twtapi")
 SIM_TWEETS_PER_MIN = _int("SIM_TWEETS_PER_MIN", 12)
 
 # TwtAPI (api.twtapi.com) — real tweet text, manual refresh only to respect
@@ -61,6 +64,12 @@ SIM_TWEETS_PER_MIN = _int("SIM_TWEETS_PER_MIN", 12)
 TWT_API_KEY = os.getenv("TWT_API_KEY", "")
 TWT_API_BASE = os.getenv("TWT_API_BASE", "https://api.twtapi.com/api/v1/twitter")
 TWT_STATUS_URL = os.getenv("TWT_STATUS_URL", "https://api.twtapi.com/myapi/status")
+
+# TwitterAPI.io — the same query grammar and the same X-API-Key header, so it
+# reuses the one-call-per-column design. It bills per tweet returned rather
+# than per call, so a refresh costs ~900 credits where TwtAPI charges 3 calls.
+TWITTERAPIIO_KEY = os.getenv("TWITTERAPIIO_KEY", "")
+TWITTERAPIIO_BASE = os.getenv("TWITTERAPIIO_BASE", "https://api.twitterapi.io/twitter")
 # YouTube Data API v3 key (Hyper Search: most-popular News & Politics videos).
 # Free quota: 10,000 units/day, one unit per scan. Empty = YouTube is skipped.
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")

@@ -1280,12 +1280,15 @@ def x_status():
     # the budget until someone spends a refresh finding out. The account
     # endpoint is not a billed call, so ask it once and the desk can show the
     # real position — and disable the button — before anyone clicks.
-    if pipeline.manual_only and config.TWT_API_KEY and not pipeline.twtapi.last_status:
-        pipeline.twtapi.account_status()
+    provider = pipeline.current_provider()
+    key = getattr(provider, "api_key", "")          # the sim layer has neither
+    if pipeline.manual_only and key and not getattr(provider, "last_status", None):
+        provider.account_status()
     return {"provider": config.X_PROVIDER, "layer": pipeline.active_layer,
             "manual_only": pipeline.manual_only,
-            "key_configured": bool(config.TWT_API_KEY),
-            **pipeline.twtapi.last_status}
+            "key_configured": bool(key),
+            "layers": [lyr.name for lyr in pipeline.layers],
+            **getattr(provider, "last_status", {})}
 
 
 @app.post("/api/sim/spike")

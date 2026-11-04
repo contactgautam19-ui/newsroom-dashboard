@@ -49,12 +49,27 @@ class TwtAPIProvider(XProvider):
     def __init__(self):
         self.last_status: dict = {}
 
+    # vendor seam: a subclass points these at its own host and key
+    key_name = "TWT_API_KEY"
+
+    @property
+    def api_key(self) -> str:
+        return config.TWT_API_KEY
+
+    @property
+    def api_base(self) -> str:
+        return config.TWT_API_BASE
+
+    def _search(self, query: str) -> dict:
+        """One 'from:a OR from:b' search, newest first."""
+        return self._get("Search", {"q": query, "type": "Latest", "count": 20})
+
     def _get(self, path: str, params: dict) -> dict:
-        if not config.TWT_API_KEY:
-            raise ProviderUnavailable("TWT_API_KEY not set in .env")
+        if not self.api_key:
+            raise ProviderUnavailable(f"{self.key_name} not set in .env")
         resp = httpx.get(
-            f"{config.TWT_API_BASE}/{path}", params=params, timeout=30,
-            headers={"X-API-Key": config.TWT_API_KEY},
+            f"{self.api_base}/{path}", params=params, timeout=30,
+            headers={"X-API-Key": self.api_key},
         )
         resp.raise_for_status()
         payload = resp.json()
@@ -150,13 +165,18 @@ class TwtAPIProvider(XProvider):
                 if not isinstance(t, dict):
                     continue
                 user = t.get("user") or t.get("author") or {}
+                # camelCase variants are TwitterAPI.io's spelling of the same
+                # fields; without them a tweet parses but loses its author and
+                # its timestamp, and one with no author is dropped entirely
                 username = (t.get("screen_name") or t.get("username")
                             or user.get("screen_name") or user.get("username")
+                            or user.get("userName")
                             or user.get("screen_name_lower") or "")
                 add(t.get("tweet_id") or t.get("id") or t.get("id_str"),
                     t.get("text") or t.get("full_text") or t.get("tweet_text"),
-                    t.get("created_at") or t.get("timestamp"),
-                    username)
+                    t.get("created_at") or t.get("createdAt") or t.get("timestamp"),
+                    username,
+                    user.get("profilePicture") or user.get("profile_image_url_https") or "")
             return tweets
 
         # Unknown shape — save a sample for debugging, never fabricate
@@ -226,9 +246,7 @@ class TwtAPIProvider(XProvider):
             top, advance = self._column_slice(column, by_column[column])
             query = " OR ".join(f"from:{h['handle'].lstrip('@')}" for h in top)
             try:
-                payload = self._get("Search", {
-                    "q": query, "type": "Latest", "count": 20,
-                })
+                payload = self._search(query)
                 collected.extend(self._extract_tweets(payload, handle_map))
                 advance()           # these handles were reached; move the window on
             except ProviderUnavailable:

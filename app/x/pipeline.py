@@ -14,6 +14,7 @@ from app.x import guardrails
 from app.x.models import Tweet
 from app.x.provider import ProviderUnavailable, XProvider
 from app.x.sim_provider import SimulatedProvider
+from app.x.twitterapiio_provider import TwitterAPIioProvider
 from app.x.twtapi_provider import TwtAPIProvider
 
 
@@ -21,11 +22,20 @@ class XPipeline:
     def __init__(self):
         self.sim = SimulatedProvider(config.SIM_TWEETS_PER_MIN)
         self.twtapi = TwtAPIProvider()
+        self.twitterapiio = TwitterAPIioProvider()
         if config.X_PROVIDER == "sim":
             self.layers: list[XProvider] = [self.sim]
         else:
-            # real tweets only — never silently fall back to simulated content
-            self.layers = [self.twtapi]
+            # real tweets only — never silently fall back to simulated content.
+            # The configured vendor leads; the other backs it up when it has a
+            # key, so an empty balance down-shifts instead of going dark.
+            preferred = (self.twitterapiio if config.X_PROVIDER == "twitterapiio"
+                         else self.twtapi)
+            backup = (self.twtapi if preferred is self.twitterapiio
+                      else self.twitterapiio)
+            self.layers = [preferred]
+            if backup.api_key:
+                self.layers.append(backup)
         self.active_layer = self.layers[0].name
         self.manual_only = config.X_PROVIDER != "sim"  # protect the call budget
         self.last_error: str | None = None
@@ -103,11 +113,23 @@ class XPipeline:
             })
         return [t for t, _ in kept]
 
+    def current_provider(self):
+        """The layer that served the last poll — whose budget the desk shows.
+
+        With two vendors the budget has to follow the one actually answering,
+        or a down-shift would leave the desk reporting the exhausted account's
+        figures and the button would stay disabled on a working provider.
+        """
+        return next((lyr for lyr in self.layers if lyr.name == self.active_layer),
+                    self.layers[0])
+
     def manual_refresh(self) -> dict:
         """User-triggered refresh (the only way tweets arrive in twtapi mode,
         so the monthly call budget is spent deliberately, never by a timer)."""
         kept = self.poll()
-        status = self.twtapi.account_status() if self.manual_only else {}
+        provider = self.current_provider()
+        status = (provider.account_status()
+                  if self.manual_only and hasattr(provider, "account_status") else {})
         result = {
             "ok": self.last_error is None,
             "layer": self.active_layer,
