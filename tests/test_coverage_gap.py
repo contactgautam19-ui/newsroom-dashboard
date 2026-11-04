@@ -177,14 +177,47 @@ def test_every_handle_is_polled_within_a_dozen_scans():
         seen: set[str] = set()
         for _ in range(12):
             for col, members in by_col.items():
-                seen.update(h["handle"]
-                            for h in TwtAPIProvider._column_slice(col, members))
+                picked, advance = TwtAPIProvider._column_slice(col, members)
+                seen.update(h["handle"] for h in picked)
+                advance()           # the search succeeded, so the window moves
     finally:
         settings_store.get_setting, settings_store.set_setting = real_get, real_set
 
     missed = {h["handle"] for h in handles} - seen
     assert not missed, f"{len(missed)} handles never polled: {sorted(missed)[:6]}"
     assert config.X_HANDLES_PER_COLUMN >= 2
+
+
+def test_a_failed_scan_does_not_skip_its_handles():
+    """A refresh that runs out of credits mid-lap used to advance the rotation
+    anyway, so the handles it never reached waited a whole extra lap. The
+    window may only move once the search has actually returned."""
+    import json
+
+    from app import settings_store
+    from app.x.twtapi_provider import TwtAPIProvider
+
+    path = pathlib.Path(__file__).resolve().parent.parent / "data" / "handles.json"
+    handles = json.loads(path.read_text(encoding="utf-8"))
+    col = max({h["stream_column"] for h in handles},
+              key=lambda c: sum(1 for h in handles if h["stream_column"] == c))
+    members = [h for h in handles if h["stream_column"] == col]
+
+    store: dict[str, str] = {}
+    real_get, real_set = settings_store.get_setting, settings_store.set_setting
+    settings_store.get_setting = lambda k, d="": store.get(k, d)
+    settings_store.set_setting = lambda k, v: store.__setitem__(k, v)
+    try:
+        first, _ = TwtAPIProvider._column_slice(col, members)   # search "fails"
+        again, advance = TwtAPIProvider._column_slice(col, members)
+        assert [h["handle"] for h in again] == [h["handle"] for h in first], \
+            "a failed scan moved the window on and skipped its handles"
+        advance()                                               # now it succeeds
+        third, _ = TwtAPIProvider._column_slice(col, members)
+        assert [h["handle"] for h in third] != [h["handle"] for h in first], \
+            "a successful scan must move the window on"
+    finally:
+        settings_store.get_setting, settings_store.set_setting = real_get, real_set
 
 
 if __name__ == "__main__":

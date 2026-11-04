@@ -129,8 +129,18 @@ const XDesk = (() => {
   function budget(r) {
     const el = document.getElementById('x-budget');
     // the account's monthly budget is the editor's business, not a demo guest's
-    if (el && r && r.monthly_remaining != null && !document.body.classList.contains('guest')) {
-      el.textContent = `${r.monthly_remaining} API calls left this month`;
+    if (!el || !r || document.body.classList.contains('guest')) return;
+    // two meters, and the smaller one is the real ceiling: the plan allows N
+    // calls a month, but each call also spends a credit, and the credit pot
+    // runs out first. Showing only the monthly figure promised 274 calls when
+    // the account had none left, so show whichever actually binds.
+    const calls = r.monthly_remaining, credits = r.credits;
+    if (credits != null && (calls == null || credits <= calls)) {
+      el.textContent = credits > 0
+        ? `${Math.floor(credits)} refresh credits left`
+        : 'no refresh credits left — top up to poll X';
+    } else if (calls != null) {
+      el.textContent = `${calls} API calls left this month`;
     }
   }
 

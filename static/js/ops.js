@@ -16,6 +16,15 @@ const Ops = (() => {
       : '<p>No guests yet.</p>';
   }
 
+  // One refresh spends three calls, one per column, and each call also spends a
+  // credit. The credit pot empties before the monthly call allowance does, so
+  // count refreshes against whichever meter binds rather than against calls.
+  function xLeft(b) {
+    if (!b) return '—';
+    const meters = [b.credits, b.monthly_remaining].filter((v) => v != null);
+    return meters.length ? Math.floor(Math.min(...meters) / 3) : '—';
+  }
+
   function metric(label, value) {
     return `<div class="bg-white border border-line rounded-xl p-3.5">
       <p class="text-[11.5px] text-sub">${esc(label)}</p>
@@ -30,7 +39,7 @@ const Ops = (() => {
     const feedsOk = li.feeds_polled ? `${li.feeds_polled - (li.feeds_failed || 0)} / ${li.feeds_polled}` : '—';
     document.getElementById('ops-metrics').innerHTML = [
       metric('Feeds healthy', feedsOk),
-      metric('X API calls left', d.x_budget?.monthly_remaining ?? '—'),
+      metric('X refreshes left', xLeft(d.x_budget)),
       metric('Briefs today', d.briefs_today ?? 0),
       metric('Handles monitored', d.handles_count ?? '—'),
     ].join('');

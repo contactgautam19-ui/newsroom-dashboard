@@ -167,14 +167,21 @@ class TwtAPIProvider(XProvider):
         return tweets
 
     @staticmethod
-    def _column_slice(column: str, members: list[dict]) -> list[dict]:
-        """The handles to poll for one column this scan: a fixed high-trust
-        core, then a window that advances through the rest each scan."""
+    def _column_slice(column: str, members: list[dict]):
+        """The handles to poll for one column this scan, and the callback that
+        moves the rotation on.
+
+        The cursor is deliberately NOT advanced here. It used to be, and a
+        refresh that died mid-lap — out of credits, rate limited, anything —
+        still moved every column on, so the handles that scan never reached
+        were skipped until the next full lap came round. The caller advances
+        only after the search actually returns.
+        """
         from app import settings_store
         per = max(1, config.X_HANDLES_PER_COLUMN)
         ranked = sorted(members, key=lambda h: (-h["trust_score"], h["handle"]))
         if len(ranked) <= per:
-            return ranked
+            return ranked, lambda: None
         core_n = max(1, per // 2)
         core, rest = ranked[:core_n], ranked[core_n:]
         slots = per - core_n
@@ -184,11 +191,14 @@ class TwtAPIProvider(XProvider):
         except (TypeError, ValueError):
             cursor = 0
         picked = [rest[(cursor + i) % len(rest)] for i in range(min(slots, len(rest)))]
-        try:
-            settings_store.set_setting(key, str((cursor + len(picked)) % len(rest)))
-        except Exception as exc:          # a cursor that will not save is not fatal
-            log.warning("could not advance rotation for column %s: %s", column, exc)
-        return core + picked
+
+        def advance():
+            try:
+                settings_store.set_setting(key, str((cursor + len(picked)) % len(rest)))
+            except Exception as exc:      # a cursor that will not save is not fatal
+                log.warning("could not advance rotation for column %s: %s", column, exc)
+
+        return core + picked, advance
 
     def fetch_new_tweets(self, handles: list[dict]) -> list[Tweet]:
         """One Search call per column: the core handles plus a rotating share.
@@ -213,13 +223,14 @@ class TwtAPIProvider(XProvider):
         collected: list[Tweet] = []
         errors: list[str] = []
         for column in sorted(by_column):
-            top = self._column_slice(column, by_column[column])
+            top, advance = self._column_slice(column, by_column[column])
             query = " OR ".join(f"from:{h['handle'].lstrip('@')}" for h in top)
             try:
                 payload = self._get("Search", {
                     "q": query, "type": "Latest", "count": 20,
                 })
                 collected.extend(self._extract_tweets(payload, handle_map))
+                advance()           # these handles were reached; move the window on
             except ProviderUnavailable:
                 raise
             except Exception as exc:
