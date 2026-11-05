@@ -114,6 +114,45 @@ def _headline(query: str) -> str:
     return re.split(r"\s+\|\s+", query.strip())[0]
 
 
+def _stem(word: str) -> str:
+    """Crude singular: enough to match "fares" to "fare", "protests" to
+    "protest". Not linguistics, just enough to stop a plural losing a match.
+
+    The "es" ending only comes off after s/x/z/ch/sh ("buses" -> "bus"); strip
+    it blindly and "fares" becomes "far", which matches nothing it should.
+    """
+    w = word.lower()
+    if len(w) <= 4 or not w.endswith("s") or w.endswith("ss"):
+        return w
+    if w.endswith("ies"):
+        return w[:-3] + "y"
+    if w.endswith("es") and re.search(r"(s|x|z|ch|sh)es$", w):
+        return w[:-2]
+    return w[:-1]
+
+
+def _on_topic(items: list[dict], query: str) -> list[dict]:
+    """Drop reports that share no distinctive word with the question.
+
+    Google News answers a query it found nothing for with general headlines,
+    so a subject with no recent coverage came back looking answered: on 5
+    November "the Bhopal gas tragedy verdict" returned six reports about Assam
+    politics, and the model would have written over them without ever saying
+    it had found nothing about Bhopal. Wrong material under a confident answer
+    is worse than an empty hand, so anything that shares not one word with the
+    question is not an answer to it.
+    """
+    wanted = {_stem(w) for w in _key_terms(query, n=8).split() if len(w) > 2}
+    if not wanted:
+        return items                      # nothing distinctive to match on
+    kept = []
+    for it in items:
+        title = re.sub(r"[^\w\s]", " ", str(it.get("title", "")))
+        if wanted & {_stem(w) for w in title.split() if len(w) > 2}:
+            kept.append(it)
+    return kept
+
+
 def _key_terms(query: str, n: int = 5) -> str:
     """The distinctive words of a long headline — a full title used as a query
     often matches only its own article. Numbers and filler words are dropped;
@@ -154,7 +193,7 @@ def search_news(query: str, limit: int = 8, recent_days: int | None = RECENT_DAY
         items = _newest_first(items + _raw_search((terms or head) + f" when:{WIDE_DAYS}d"))
     if not items:
         items = _newest_first(_raw_search(terms or head))
-    return items[:limit]
+    return _on_topic(items, query)[:limit]
 
 
 def search_news_past_hour(keyword: str, limit: int = 5) -> list[dict]:

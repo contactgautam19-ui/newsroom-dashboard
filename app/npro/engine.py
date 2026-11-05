@@ -398,8 +398,16 @@ _POINTS_BACK = re.compile(
 # Scaffolding an instruction is wrapped in, stripped before judging what is left.
 _SCAFFOLD = re.compile(
     r"^\s*(?:please\s+)?(?:can you\s+|could you\s+|i (?:want|need)\s+(?:you to\s+)?)?"
+    # "tell me about X" and "explain X" are how an editor actually opens a
+    # subject, and they were not stripped: the search went out as "Tell about
+    # Bhopal gas tragedy", and Google answered a question nobody asked — four
+    # reports about Assam politics under a question about Bhopal. Wrong
+    # material under a confident answer is worse than no material.
     r"(?:find|get|pull|fetch|show|give|send|write|draft|build|make|create|do|"
-    r"prepare|put together)\s+(?:me\s+)?(?:a|an|the|some|all)?\s*"
+    r"prepare|put together|tell|explain|describe|summari[sz]e|brief|"
+    # \b after the article, or the "a" alternative eats the "a" of "about"
+    # and "tell me about the Bhopal verdict" searches for "bout Bhopal".
+    r"walk (?:me )?through)\s+(?:me\s+)?(?:(?:a|an|the|some|all)\b\s*)?"
     r"(?:articles?|reports?|reporting|stories|story|script|package|explainer|"
     r"copy|piece|rundown|summary|brief)?\s*(?:on|about|for|of)?\s*",
     re.IGNORECASE)
