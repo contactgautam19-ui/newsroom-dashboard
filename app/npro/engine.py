@@ -346,9 +346,16 @@ def is_desk_question(query: str) -> bool:
 
 
 # "what's the latest on <keyword>" -> a Google-News past-hour headline pull
+# The preposition list used to be on|about|with|regarding|around|for, which
+# quietly excluded how a desk actually asks for a place: "what's the latest IN
+# Karnataka", "latest FROM Bengaluru", "news OUT OF Punjab". Those fell through
+# to the slow model path and, on a serverless request, hung on "Pulling the
+# latest reports" until the function timed out — so a question the deterministic
+# past-hour pull answers in one call looked like a feature that did not exist.
 _LATEST_RE = re.compile(
     r"\b(?:latest|newest|recent|breaking|updates?|happening|new)\b"
-    r".*?\b(?:on|about|with|regarding|around|for)\s+(.+?)\s*[?.!]*$",
+    r".*?\b(?:on|about|with|regarding|around|for|in|from|out of|across|at)\s+"
+    r"(.+?)\s*[?.!]*$",
     re.IGNORECASE)
 _KW_TRAILING = re.compile(
     r"\b(right now|as of now|currently|today|please|news|story|stories|latest)\b\s*$",
@@ -365,7 +372,14 @@ def latest_keyword(query: str) -> str | None:
     while prev != kw:                        # peel trailing filler ("... news")
         prev = kw
         kw = _KW_TRAILING.sub("", kw).strip().strip("\"'.,?!")
-    return kw if 1 < len(kw) <= 60 else None
+    if not (1 < len(kw) <= 60):
+        return None
+    # Widening the prepositions to catch "latest in Karnataka" also catches
+    # "latest in the rundown", which is a question about our own board, not a
+    # subject to go and search the news for. Hand those back to the desk path.
+    if _DESK_HINT.search(kw):
+        return None
+    return kw
 
 
 # ── what to actually search for ────────────────────────────────────────────

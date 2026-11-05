@@ -178,6 +178,10 @@ const Social = (() => {
 const Hyper = (() => {
   let deck = null;
   const $ = id => document.getElementById(id);
+  // Past this, a deck is reporting a news hour that has gone. Building one is
+  // a paid model call, so the page warns and offers the button rather than
+  // spending on a rebuild nobody asked for.
+  const STALE_DECK_MS = 3 * 60 * 60 * 1000;
 
   function card(a) {
     const r = a.populist_resonance_index;
@@ -225,7 +229,24 @@ const Hyper = (() => {
       return;
     }
     $('hyper-status').textContent = `Built ${ageLabel(deck.built_at)}`;
+    // A deck is a read of a particular news hour, so an old one is not just
+    // less useful, it is wrong — it ranks stories that have since died and
+    // misses everything that broke after it. The age was only ever a quiet
+    // line in the status bar, so a deck built four days earlier presented
+    // exactly like one built four minutes earlier. Say it on the deck itself.
+    const builtMs = deck.built_at ? Date.now() - new Date(deck.built_at).getTime() : 0;
+    const stale = builtMs > STALE_DECK_MS;
+    const staleBanner = stale ? `
+      <div class="rounded-2xl px-4 py-3 mb-3 flex items-start gap-3"
+           style="background:var(--tint-amber);border:1px solid var(--amber)">
+        <span class="shrink-0 text-[15px] leading-none mt-0.5">⚠</span>
+        <div class="min-w-0">
+          <p class="text-[13.5px] font-semibold">This deck is ${esc(ageLabel(deck.built_at))} old.</p>
+          <p class="text-[12.5px] text-sub mt-0.5">It ranks the news of that hour, not this one. Run Hyper Search again before you work from it.</p>
+        </div>
+      </div>` : '';
     el.innerHTML = `
+      ${staleBanner}
       <div class="border border-line rounded-2xl px-5 py-5 mb-3">
         <p class="text-[26px] leading-tight" style="font-family:var(--f-display);letter-spacing:-.02em">${esc(deck.deck_headline)}</p>
       </div>

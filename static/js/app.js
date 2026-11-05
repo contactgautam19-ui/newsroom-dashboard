@@ -83,6 +83,18 @@ const Nav = (() => {
   const PAGES = ['page-stories', 'page-hyper', 'page-social', 'page-xdesk', 'page-ops', 'page-analytics', 'page-alerts'];
   let current = 'stories';
 
+  // A view that cannot load should say so. Failing silently left the nav item
+  // highlighted over an empty page, which reads as "the app is broken" rather
+  // than "that panel could not fetch its data".
+  function viewFailed(label) {
+    return (err) => {
+      console.error(`${label} failed to open`, err);
+      if (typeof Toast !== 'undefined') {
+        Toast.show(`${label} could not load — try again.`, { ms: 6000 });
+      }
+    };
+  }
+
   function go(name) {
     const v = VIEWS[name] || VIEWS.stories;
     current = name;
@@ -100,8 +112,17 @@ const Nav = (() => {
     if (name === 'ops') Ops.load();
     if (name === 'analytics') Views.analytics();
     if (name === 'alerts') Views.alerts();
-    if (name === 'hyper') Hyper.open();
-    if (name === 'social') Social.open();
+    // A view change is a new page, so start it at the top. Without this the
+    // window kept the scroll offset from wherever the board was, and on a
+    // phone — where the board is thousands of pixels long and these pages
+    // render short until their data lands — tapping Social Monitor or Hyper
+    // Search dropped the reader onto blank space below the content and looked
+    // exactly like the view had failed to open.
+    window.scrollTo(0, 0);
+    // open() is async and must not be able to strand the sidebar: a rejection
+    // here used to skip hideSidebar() and leave the drawer covering the view
+    if (name === 'hyper') Promise.resolve(Hyper.open()).catch(viewFailed('Hyper Search'));
+    if (name === 'social') Promise.resolve(Social.open()).catch(viewFailed('Social Monitor'));
     if (window.innerWidth < 1024) hideSidebar();
     location.hash = name;
   }

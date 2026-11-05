@@ -280,10 +280,21 @@ def _near_duplicate(headline: str, kept: list[dict]) -> bool:
     return False
 
 
-# what counts as broadcast evidence for the "What's on air" panel: player OCR
-# and the channel's own aired-story X posts. YouTube title tags ('title') and
-# website scrapes ('web') still feed alerts + rival matching but NOT this panel
-AIRED_SOURCES = ("ocr", "x")
+# What counts as broadcast evidence for the "What's on air" panel.
+#
+# 'title' belongs here even though it is the weakest of the three. The refresh
+# button's X path needs a TwtAPI key and quota, and demo guests never get it at
+# all, so on a keyless deploy, an exhausted quota or any guest session the only
+# path that runs is the keyless YouTube-title poll — which writes 'title' rows.
+# Leaving it out meant Refresh did its job, stored the headlines, and the panel
+# then dropped every one of them and said "Nothing captured on the live streams
+# yet". On 5 November production held 16 such rows across 3 channels in the
+# last 12 hours and the panel showed zero.
+#
+# A live stream's own title is the channel's own statement of what it is airing
+# now, so it is evidence; it is just thinner than a lower-third OCR read. The
+# panel labels each row with its source rather than presenting all three alike.
+AIRED_SOURCES = ("ocr", "x", "title")
 
 
 def onair_hourly(hours_back: int = WINDOW_HOURS) -> dict:

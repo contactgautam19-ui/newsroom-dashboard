@@ -45,6 +45,23 @@ const LiveCoverage = (() => {
     }).replace(/ /g, ' ').replace(/\b(am|pm)\b/i, m => m.toUpperCase());
   }
 
+  // Where a line came from. The three sources are not equal evidence: an OCR
+  // read is the lower-third as it aired, the channel's own X post is a claim
+  // it aired, and a stream title is the broadest of the three. The panel says
+  // which rather than letting a title read pass for a lower-third.
+  const VIA = {
+    ocr: { label: 'on screen', hint: 'Read off the live player' },
+    x: { label: 'channel post', hint: 'From the channel’s own X post' },
+    title: { label: 'stream title', hint: 'From the live stream title' },
+  };
+
+  function viaTag(via) {
+    const v = VIA[via];
+    if (!v) return '';
+    return `<span class="shrink-0 hidden sm:inline text-[10.5px] text-sub px-1.5 py-[1px] rounded border border-line"
+      title="${esc(v.hint)}">${esc(v.label)}</span>`;
+  }
+
   function itemRow(it) {
     const time = clock(it.at);
     const brk = it.breaking
@@ -56,6 +73,7 @@ const LiveCoverage = (() => {
         class="group w-full flex items-center gap-3 px-3.5 py-2.5 text-left border-t border-line hover:bg-paper">
         <span class="shrink-0 w-[58px] font-mono text-[11.5px] text-sub tabular-nums">${esc(time)}</span>
         <span class="min-w-0 flex-1 truncate text-[13.5px] leading-snug">${brk}${esc(it.headline)}</span>
+        ${viaTag(it.via)}
         <span class="shrink-0 text-sub text-[15px] leading-none group-hover:text-ink">&rsaquo;</span>
       </button>`;
   }
