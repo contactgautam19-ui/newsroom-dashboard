@@ -81,6 +81,51 @@ def test_stemming_matches_singular_and_plural():
     assert _stem("gas") == "gas"          # short words are left alone
 
 
+STARTER_BUTTONS = [
+    "Which stories should I pick at the top of the hour?",
+    "Which story is likely to go viral?",
+    "Which stories are trending on X right now?",
+    "Which stories could generate the highest views?",
+    "What are rival channels airing right now?",
+    "What are competitors covering that we are missing?",
+]
+
+
+def test_every_starter_button_is_answered_from_the_board():
+    """The six chips in the N-Pro welcome card are all questions about our
+    own desk. If one of them ever routes to a news search it will answer from
+    the open web instead of the board, which is not what it is asking."""
+    from app.npro import engine
+
+    for q in STARTER_BUTTONS:
+        assert engine.is_desk_question(q), f"starter button went to news: {q!r}"
+
+
+def test_desk_vocabulary_does_not_capture_a_named_subject():
+    """"trending", "viral" and "views" are desk words and ordinary news words
+    both. Treating every one of them as a desk question answered "what's
+    trending in the Bihar election?" from a board that had never carried it."""
+    from app.npro import engine
+
+    for q in ["What's trending in the Bihar election?",
+              "Is the Delhi AQI story going viral?",
+              "What's trending about Karnataka bus fares?",
+              "Which way is the POK story trending?"]:
+        assert not engine.is_desk_question(q), \
+            f"a named subject was answered from the board: {q!r}"
+
+
+def test_questions_about_our_own_board_still_reach_it():
+    from app.npro import engine
+
+    for q in ["What should I lead with?",
+              "What's the latest in the rundown?",
+              "Anything missing from the board?",
+              "What are our top stories right now?",
+              "What are rival channels airing?"]:
+        assert engine.is_desk_question(q), f"a desk question went to news: {q!r}"
+
+
 def test_a_question_about_a_place_still_reaches_live_reporting():
     """The geographic phrasings route to the deterministic past-hour pull
     rather than the board, which is what makes an off-board place answerable."""

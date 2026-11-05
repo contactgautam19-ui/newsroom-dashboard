@@ -335,14 +335,38 @@ def _clean_chat(text: str, corpus: Corpus) -> str:
 
 
 # question phrasings that are about OUR desk/board rather than a news topic
-_DESK_HINT = re.compile(
-    r"\b(pick|lead|bulletin|top of the hour|rundown|board|viral|trending|"
-    r"views|rivals?|competitors?|airing|missing|x desk|my stories|"
-    r"what should (i|we))\b", re.IGNORECASE)
+# Words that can only be about our own desk: no subject outside this building
+# makes sense with them.
+_DESK_STRONG = re.compile(
+    r"\b(top of the hour|rundown|the board|bulletin|rivals?|competitors?|"
+    r"airing|missing|x desk|what should (i|we)|"
+    # "our stories", "my top stories", "the top stories" — asking after the
+    # board by name, with no verb that needs a second word to disambiguate
+    r"(?:our|my|the)\s+(?:top\s+)?stor(?:y|ies))\b", re.IGNORECASE)
+
+# Words that are about our desk only when a desk object is in the sentence.
+# "Which stories are trending on X right now?" is a question about the board;
+# "What's trending in the Bihar election?" is a question about Bihar, and
+# treating the second as the first answered it from a board that had never
+# heard of it. The difference is whether the sentence names one of ours.
+_DESK_WEAK = re.compile(r"\b(pick|lead|viral|trending|views)\b", re.IGNORECASE)
+# Deliberately narrow. A bare "story" is ordinary news English — "the Delhi
+# AQI story" names a subject, not one of ours — and treating it as a desk
+# object sent a named subject to a board that may never have carried it. Our
+# own stories are asked about as a set ("which stories"), as ours, or by the
+# place they sit in.
+_DESK_OBJECT = re.compile(
+    r"\b(?:(?:which|what|any|the top|the best)\s+stor(?:y|ies)|"
+    r"(?:our|my)\s+stor(?:y|ies)|the board|rundown|bulletin|the desk|"
+    r"channels?|\bwe\b|\bus\b|\bour\b)", re.IGNORECASE)
 
 
 def is_desk_question(query: str) -> bool:
-    return bool(_DESK_HINT.search(query or ""))
+    """True when the question is about our board rather than the news."""
+    q = query or ""
+    if _DESK_STRONG.search(q):
+        return True
+    return bool(_DESK_WEAK.search(q) and _DESK_OBJECT.search(q))
 
 
 # "what's the latest on <keyword>" -> a Google-News past-hour headline pull
@@ -377,7 +401,7 @@ def latest_keyword(query: str) -> str | None:
     # Widening the prepositions to catch "latest in Karnataka" also catches
     # "latest in the rundown", which is a question about our own board, not a
     # subject to go and search the news for. Hand those back to the desk path.
-    if _DESK_HINT.search(kw):
+    if is_desk_question(kw):
         return None
     return kw
 
