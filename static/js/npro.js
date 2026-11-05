@@ -933,28 +933,22 @@ const NPro = (() => {
     return [...STARTERS, ...S.history, ...stories];
   }
 
-  // Suggestions already on screen as chips in the thread. The welcome card
-  // renders every starter as a chip, and the empty-input dropdown used to
-  // render the same six again directly below them: on a phone, where the
-  // chips stack one per row, the two identical lists filled the whole screen
-  // and the console looked like it had rendered twice.
-  function onScreen() {
-    return new Set([...document.querySelectorAll('#npro-thread [data-q]')]
-      .map(b => b.dataset.q));
-  }
-
   function showSuggest() {
     const inp = document.getElementById('npro-input');
     const box = document.getElementById('npro-suggest');
     if (!inp || !box) return;
     const q = inp.value.trim().toLowerCase();
-    const pool = sugPool();
-    const shown = onScreen();
-    const hits = (q
-      ? pool.filter(s => s.toLowerCase().includes(q) && s.toLowerCase() !== q)
-      // nothing typed yet: offer what is NOT already a chip on screen
-      : pool.filter(s => !shown.has(s))
-    ).slice(0, 6);
+    // Nothing typed: stay shut. Everything this list could offer is already on
+    // screen — the starters as chips in the thread, the board's stories in the
+    // left rail — so opening it on focus only stacked a second copy over the
+    // console. That is the clutter: the same options twice, on both sides.
+    if (!q) return hideSuggest();
+    // Once there is a query, match the whole pool. Filtering out what happens
+    // to be on screen looked tidy and was wrong: type "viral" and the one
+    // suggestion that matches is a starter chip, so the list came back empty.
+    const hits = sugPool()
+      .filter(s => s.toLowerCase().includes(q) && s.toLowerCase() !== q)
+      .slice(0, 6);
     if (!hits.length) return hideSuggest();
     sugIndex = -1;
     box.innerHTML = hits.map((s, i) =>

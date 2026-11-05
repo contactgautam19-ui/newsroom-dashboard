@@ -241,7 +241,7 @@ const Hyper = (() => {
            style="background:var(--tint-amber);border:1px solid var(--amber)">
         <span class="shrink-0 text-[15px] leading-none mt-0.5">⚠</span>
         <div class="min-w-0">
-          <p class="text-[13.5px] font-semibold">This deck is ${esc(ageLabel(deck.built_at))} old.</p>
+          <p class="text-[13.5px] font-semibold">This deck was built ${esc(ageLabel(deck.built_at))}.</p>
           <p class="text-[12.5px] text-sub mt-0.5">It ranks the news of that hour, not this one. Run Hyper Search again before you work from it.</p>
         </div>
       </div>` : '';
