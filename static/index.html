@@ -77,6 +77,11 @@ tailwind.config = { theme: { extend: {
           --ch-default: #8C9AB0;
           /* the text colour that sits ON a bone/ink button */
           --abyss: #080B12; --deep: #0B1018;
+          /* where a primary button goes on hover. It cannot be a fixed colour:
+             the button is a bone pill with dark text in this theme and a dark
+             pill with white text in the other, so one hover value is bound to
+             collide with one of the two. */
+          --btn-hi: #FFFFFF;
           --header-bg: rgba(17, 24, 39, .86);
           --shadow-lg: 0 18px 50px rgba(0, 0, 0, .55);
           --f-display: "Newsreader", "Iowan Old Style", Georgia, serif;
@@ -101,6 +106,9 @@ tailwind.config = { theme: { extend: {
           --ch-republic: #8A6730; --ch-news18: #37705F; --ch-wion: #96547A;
           --ch-default: #58657A;
           --abyss: #FFFFFF; --deep: #FFFFFF;
+          /* the pill is dark here and its label is white, so it lifts rather
+             than brightening to white — which would have put white on white */
+          --btn-hi: #26324A;
           --header-bg: rgba(255, 255, 255, .88);
           --shadow-lg: 0 14px 38px rgba(16, 24, 40, .14); }
 
@@ -171,6 +179,42 @@ tailwind.config = { theme: { extend: {
   :root[data-theme="light"] .gen-badge { background: rgba(180, 83, 9, .12); color: var(--amber); }
   :root[data-theme="light"] .gen-badge.ok { background: rgba(4, 120, 87, .12); color: var(--green); }
 
+  /* ── light-mode repaints: interaction states ──────────────────────────
+     Tailwind compiles every variant into its own class, so `.bg-paper` and
+     `.hover\:bg-paper` are two different selectors and the repaints above —
+     which name only the base classes — never reached a single hover, focus
+     or group-hover colour. All of them therefore kept the dark palette's hex
+     in light mode: hovering a row in "What's on air by the hour" painted it
+     #111827 under near-black text, and hover:text-ink / hover:border-ink
+     both resolve to #F4F6FA, which is white on white. The effect ran through
+     every tab, because these four utilities are how the whole dashboard
+     signals "this is interactive". */
+  :root[data-theme="light"] .hover\:bg-paper:hover { background-color: var(--panel) !important; }
+  /* :not(.bg-navy) because the primary buttons carry bg-navy AND
+     hover:bg-navy2, and they are controls, not surfaces: their fill is set by
+     the bg-navy rules below and their hover by --btn-hi. Without the guard
+     this repaint outranked those on specificity and painted every primary
+     button near-white while its label stayed white. */
+  :root[data-theme="light"] .hover\:bg-navy2:hover:not(.bg-navy) { background-color: var(--card-hi) !important; }
+  :root[data-theme="light"] .hover\:text-ink:hover,
+  :root[data-theme="light"] .group:hover .group-hover\:text-ink { color: var(--ink) !important; }
+  :root[data-theme="light"] .hover\:border-ink:hover,
+  :root[data-theme="light"] .focus\:border-ink:focus { border-color: var(--ink) !important; }
+  /* The composer pairs this with focus:outline-none, so the border is the only
+     thing marking focus; the dark theme's lighter blue sits at about 3:1 on a
+     white field, where the light theme's own blue clears 7:1. */
+  :root[data-theme="light"] .focus\:border-accent:focus { border-color: var(--blue) !important; }
+  /* The two rails stay dark in both themes, so their hovers keep the dark
+     ladder. N-Pro's recent-stories list is rendered into the rail from JS,
+     which is how a repaint scoped to the canvas would otherwise have left a
+     pale strip sitting inside a near-black column. */
+  :root[data-theme="light"] #sidebar .hover\:bg-navy2:hover,
+  :root[data-theme="light"] #npro aside.bg-navy .hover\:bg-navy2:hover,
+  :root[data-theme="light"] #sidebar .hover\:bg-paper:hover,
+  :root[data-theme="light"] #npro aside.bg-navy .hover\:bg-paper:hover { background-color: var(--rail-hi) !important; }
+  :root[data-theme="light"] #sidebar .hover\:text-ink:hover,
+  :root[data-theme="light"] #npro aside.bg-navy .hover\:text-ink:hover { color: #FFFFFF !important; }
+
   /* type: serif for headlines, mono for small labels, Geist for everything else */
   h1, h2, h3 { font-family: var(--f-display); font-weight: 400 !important; letter-spacing: -.02em; }
   #page-title { font-size: 1.75rem !important; letter-spacing: -.03em; }
@@ -181,7 +225,7 @@ tailwind.config = { theme: { extend: {
 
   /* actions: bone pills for the things you press, hairline pills for the rest */
   button.bg-navy, a.bg-navy { background: var(--ink) !important; color: var(--abyss) !important; }
-  button.bg-navy:hover, a.bg-navy:hover { background: #fff !important; }
+  button.bg-navy:hover, a.bg-navy:hover { background: var(--btn-hi) !important; }
   button.rounded-xl, a.rounded-xl { border-radius: 999px !important; }
   .bg-accent { background: transparent !important; border: 1px solid var(--line-2); color: var(--ink) !important; }
   button.bg-accent:hover { border-color: var(--ink-2); opacity: 1 !important; }
