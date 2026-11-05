@@ -7,7 +7,9 @@ into an in-memory set backed by the tweets table, so duplicates never reach
 the UI.
 """
 
+import hashlib
 import json
+import logging
 
 from app import config, db, events
 from app.x import guardrails
@@ -16,6 +18,8 @@ from app.x.provider import ProviderUnavailable, XProvider
 from app.x.sim_provider import SimulatedProvider
 from app.x.twitterapiio_provider import TwitterAPIioProvider
 from app.x.twtapi_provider import TwtAPIProvider
+
+log = logging.getLogger("newsroom.pipeline")
 
 
 class XPipeline:
@@ -141,12 +145,34 @@ class XPipeline:
         return result
 
 
+_SEED_FINGERPRINT_KEY = "handles_seed_sha"
+
+
 def seed_handles_table() -> int:
-    """Load data/handles.json into the handles table (idempotent)."""
+    """Load data/handles.json into the handles table (idempotent).
+
+    This runs on every boot, and on Vercel every cold start is a boot. Writing
+    all 242 rows each time cost 16.9s measured against the production database
+    from a laptop and most of a 63s cold start from the serverless region —
+    before the first byte of the page was served, every time the app had been
+    idle. The rows were identical on all but the rare boot that follows an
+    edit to handles.json, so the file's own fingerprint decides: one cheap
+    read when nothing changed, the full write when it did.
+    """
     path = config.DATA_DIR / "handles.json"
     if not path.exists():
         return 0
-    records = json.loads(path.read_text(encoding="utf-8"))
+    raw = path.read_bytes()
+    records = json.loads(raw.decode("utf-8"))
+    fingerprint = hashlib.sha256(raw).hexdigest()[:32]
+
+    from app import settings_store
+    try:
+        if settings_store.get_setting(_SEED_FINGERPRINT_KEY, "") == fingerprint:
+            return 0                      # already seeded from this exact file
+    except Exception as exc:              # first boot, no settings table yet
+        log.debug("seed fingerprint unreadable, seeding anyway: %s", exc)
+
     with db.connect() as con:
         for h in records:
             con.execute(
@@ -162,6 +188,11 @@ def seed_handles_table() -> int:
                  h["organization"], h["region"], h["stream_column"],
                  h["trust_score"], h["notes"]),
             )
+    # only after the write succeeded, so a failed seed is retried next boot
+    try:
+        settings_store.set_setting(_SEED_FINGERPRINT_KEY, fingerprint)
+    except Exception as exc:
+        log.warning("could not record the handles fingerprint: %s", exc)
     return len(records)
 
 
