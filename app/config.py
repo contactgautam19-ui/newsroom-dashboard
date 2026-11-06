@@ -90,6 +90,26 @@ RETIRE_HOURS = _int("RETIRE_HOURS", 2)               # retire board stories olde
 BOARD_WINDOW_HOURS = _int("BOARD_WINDOW_HOURS", 1)   # board shows only stories newer than this (strict)
 X_TERM_WINDOW_MIN = _int("X_TERM_WINDOW_MIN", 30)    # X-desk hot-term lookback
 
+# Auto-tracking: a story that keeps running across scans and keeps being
+# picked up by more outlets is one the desk should be following, and asking an
+# editor to notice that by eye is how a running story gets missed. The test is
+# deliberately "sustained AND corroborated", not "loud once": on 6 November
+# 483 signals were raised in twelve hours, 383 of them re-seen on a later
+# scan, and only 93 carried by five outlets or more. Urgency alone would open
+# a track on every fire in Delhi.
+AUTO_TRACK_ENABLED = _bool("AUTO_TRACK_ENABLED", True)
+AUTO_TRACK_URGENCY = _int("AUTO_TRACK_URGENCY", 70)      # running peak, 0-100
+AUTO_TRACK_OUTLETS = _int("AUTO_TRACK_OUTLETS", 4)       # distinct outlets carrying it
+AUTO_TRACK_MIN_MINUTES = _int("AUTO_TRACK_MIN_MINUTES", 60)   # ran at least this long
+# ...and not much longer. A headline still being filed twenty hours on is not
+# a story that keeps developing, it is a service or evergreen piece being
+# syndicated round the clock: on 6 November "Gold 10 gm or Silver 1 kg? What
+# to buy on Dhanteras" had run 1,243 minutes across seven outlets and passed
+# every other test here.
+AUTO_TRACK_MAX_HOURS = _int("AUTO_TRACK_MAX_HOURS", 12)
+AUTO_TRACK_MAX_PER_DAY = _int("AUTO_TRACK_MAX_PER_DAY", 6)    # so the panel cannot flood
+AUTO_TRACK_PER_SCAN = _int("AUTO_TRACK_PER_SCAN", 2)          # each costs a backfill search
+
 # Ranking / broker thresholds (from the PRD and Master Prompt)
 CONFIDENCE_REVIEW_THRESHOLD = 70          # below this -> NEEDS REVIEW flag
 SPIKE_THRESHOLD_PCT = 150                 # >150% volume spike in rolling window

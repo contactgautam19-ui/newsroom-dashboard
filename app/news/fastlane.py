@@ -324,6 +324,18 @@ def run_fast_scan(promote: bool = True) -> dict:
         log.warning("tracked-story check failed: %s", exc)
         stats["tracking"] = {"error": str(exc)}
 
+    # Which stories are worth following is a judgement an editor makes by
+    # noticing that something keeps coming back — and a desk that is busy is
+    # exactly when nobody notices. The signals above already carry the
+    # evidence, so a story still running an hour on across four outlets opens
+    # its own track. Runs after check_all so a track opened here backfills
+    # once, here, rather than twice in the same scan.
+    try:
+        stats["auto_track"] = tracker.auto_track_from_signals()
+    except Exception as exc:
+        log.warning("auto-track failed: %s", exc)
+        stats["auto_track"] = {"error": str(exc)}
+
     # Everything above leaves its findings on a screen. This is the only part
     # that reaches somebody who is not looking at one, which is the whole
     # reason the watch runs unattended.

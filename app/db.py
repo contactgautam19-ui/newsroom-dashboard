@@ -272,6 +272,11 @@ MIGRATIONS = [
     # how the story reached the board, so a watched story is never mistaken for
     # one the ranking found on its own merits
     "ALTER TABLE stories ADD COLUMN watched INTEGER NOT NULL DEFAULT 0",
+    # auto-tracking (2026-11): a signal is judged once and the verdict kept, so
+    # a story the rule declined is not re-weighed on every scan for hours, and
+    # one it took cannot be opened twice
+    "ALTER TABLE fast_signals ADD COLUMN auto_tracked INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE tracked_stories ADD COLUMN auto INTEGER NOT NULL DEFAULT 0",
 ]
 
 

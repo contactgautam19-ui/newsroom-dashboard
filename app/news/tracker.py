@@ -27,7 +27,7 @@ from urllib.parse import quote_plus
 import feedparser
 import httpx
 
-from app import db
+from app import config, db, events
 
 log = logging.getLogger("newsroom.tracker")
 
@@ -147,8 +147,141 @@ def query_from_title(title: str) -> str:
     return " ".join(keep[:6]) or (title or "").strip()[:80]
 
 
+# A digest is many stories wearing one headline. It runs all morning and is
+# carried by one masthead, so it looks sustained to every test above while
+# being the one thing a standing search can never follow: there is no single
+# story under it to develop.
+_DIGEST_RE = re.compile(
+    r"\b(morning brief|evening brief|daily brief|news brief|briefing|"
+    r"top (?:stories|headlines|news)|headlines? (?:today|of the day|at)|"
+    r"news (?:wrap|roundup|recap)|round-?up|recap|digest|bulletin|"
+    r"what you need to know|in pictures|live updates?|liveblog|"
+    # the daily market wrap and the buyer's-guide piece are both filed every
+    # day under a near-identical headline, so they look sustained for ever
+    r"markets? today|market wrap|closing bell|what to buy|should you buy|"
+    r"best (?:deals|offers|picks)|horoscope|price today)\b", re.I)
+
+
+def _is_digest(title: str) -> bool:
+    return bool(_DIGEST_RE.search(title or ""))
+
+
+def already_following(con, title: str) -> bool:
+    """Is this the same running story as something already tracked?
+
+    Exact-label matching is not enough: the same event arrives worded six
+    different ways by six outlets, and each wording would open its own track.
+    Same event test as the board uses, so the two agree on what "the same
+    story" means.
+    """
+    from app.news.ingest import _same_event, _sig_tokens
+
+    tokens = _sig_tokens(title)
+    if len(tokens) < 2:
+        return False
+    for row in con.execute(
+            "SELECT label FROM tracked_stories WHERE active=1").fetchall():
+        if _same_event(tokens, _sig_tokens(row["label"] or "")):
+            return True
+    return False
+
+
+def auto_track_from_signals() -> dict:
+    """Open tracks on stories that keep running and keep being picked up.
+
+    The breaking lane already measures everything this needs: how many outlets
+    carried a headline, the running peak of its urgency, and — because a
+    signal that is still being filed gets its last_seen stamped again — how
+    long it has been going. A story that is loud once is a flash; a story
+    still being filed an hour later by four outlets is a running story, and
+    running stories are what the tracking panel is for.
+
+    Deliberately conservative. There is a per-scan limit because each new
+    track backfills with a search, a daily cap so the panel cannot flood, and
+    a kill switch. Nothing here retires a track: stopping one stays an
+    editor's decision.
+    """
+    if not config.AUTO_TRACK_ENABLED:
+        return {"enabled": False, "opened": 0}
+
+    now = datetime.now(timezone.utc)
+    day_start = (now + timedelta(hours=5, minutes=30)).replace(
+        hour=0, minute=0, second=0, microsecond=0) - timedelta(hours=5, minutes=30)
+    # Two different questions, and the first draft confused them. "First seen
+    # an hour ago and seen again at some point" is satisfied by a story that
+    # fired at six, was re-filed at 6:04 and died — it says the signal is old,
+    # not that the story ran. What matters is the SPREAD between first and
+    # last filing, and that the last filing is recent enough for the story to
+    # still be live.
+    min_run = timedelta(minutes=config.AUTO_TRACK_MIN_MINUTES)
+    max_run = timedelta(hours=config.AUTO_TRACK_MAX_HOURS)
+    still_warm = (now - timedelta(hours=2)).isoformat()
+
+    opened, considered, skipped = [], 0, {"duplicate": 0, "cap": 0, "limit": 0}
+    with db.connect() as con:
+        today = con.execute(
+            "SELECT COUNT(*) c FROM tracked_stories WHERE auto=1 AND created_at >= ?",
+            (day_start.isoformat(),)).fetchone()["c"]
+        if today >= config.AUTO_TRACK_MAX_PER_DAY:
+            return {"enabled": True, "opened": 0, "reason": "daily cap reached",
+                    "today": today}
+        # still running: first seen long enough ago AND filed again since
+        rows = con.execute(
+            "SELECT signal_key, title, urgency, outlets, first_seen, last_seen "
+            "FROM fast_signals WHERE auto_tracked = 0 AND urgency >= ? "
+            "AND outlets >= ? AND last_seen >= ? "
+            "ORDER BY urgency DESC, outlets DESC LIMIT 60",
+            (config.AUTO_TRACK_URGENCY, config.AUTO_TRACK_OUTLETS, still_warm),
+        ).fetchall()
+        candidates = []
+        for r in db.rows_to_dicts(rows):
+            try:
+                ran = (datetime.fromisoformat(str(r["last_seen"]))
+                       - datetime.fromisoformat(str(r["first_seen"])))
+            except ValueError:
+                continue
+            if min_run <= ran <= max_run and not _is_digest(r["title"]):
+                r["ran_minutes"] = int(ran.total_seconds() / 60)
+                candidates.append(r)
+
+    for sig in candidates:
+        considered += 1
+        if len(opened) >= config.AUTO_TRACK_PER_SCAN:
+            skipped["limit"] += 1
+            break
+        if today + len(opened) >= config.AUTO_TRACK_MAX_PER_DAY:
+            skipped["cap"] += 1
+            break
+        with db.connect() as con:
+            if already_following(con, sig["title"]):
+                # settled: this story is covered, never weigh it again
+                con.execute("UPDATE fast_signals SET auto_tracked = 1 "
+                            "WHERE signal_key = ?", (sig["signal_key"],))
+                skipped["duplicate"] += 1
+                continue
+        try:
+            track = start(label=sig["title"][:120], created_by="auto", auto=True)
+        except ValueError as exc:       # at the active-track ceiling
+            log.info("auto-track declined: %s", exc)
+            skipped["limit"] += 1
+            break
+        except Exception as exc:        # a failed track must not cost the scan
+            log.warning("auto-track failed for %r: %s", sig["title"][:60], exc)
+            continue
+        with db.connect() as con:
+            con.execute("UPDATE fast_signals SET auto_tracked = 1 "
+                        "WHERE signal_key = ?", (sig["signal_key"],))
+        opened.append({"id": track.get("id"), "label": track.get("label"),
+                       "urgency": sig["urgency"], "outlets": sig["outlets"],
+                       "updates": len(track.get("updates") or [])})
+        events.publish("auto_track", opened[-1])
+
+    return {"enabled": True, "opened": len(opened), "tracks": opened,
+            "considered": considered, "skipped": skipped, "today": today}
+
+
 def start(label: str, query: str = "", story_id: int | None = None,
-          created_by: str = "editor") -> dict:
+          created_by: str = "editor", auto: bool = False) -> dict:
     """Begin tracking. Returns the track, with its first developments already in."""
     label = (label or "").strip()
     if not label:
@@ -170,8 +303,8 @@ def start(label: str, query: str = "", story_id: int | None = None,
             return get(existing["id"])
         cur = con.execute(
             "INSERT INTO tracked_stories (label, query, story_id, created_at, "
-            "created_by) VALUES (?,?,?,?,?)",
-            (label, query, story_id, now, created_by))
+            "created_by, auto) VALUES (?,?,?,?,?,?)",
+            (label, query, story_id, now, created_by, int(auto)))
         tracked_id = cur.lastrowid
 
     # Backfill straight away, so the editor sees the story so far rather than
