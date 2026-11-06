@@ -270,16 +270,22 @@ def check_one(tracked_id: int, window: str | None = None,
     with db.connect() as con:
         for it in items:
             key = _key(tracked_id, it["title"])
-            if con.execute("SELECT 1 FROM tracked_updates WHERE tracked_id=? "
-                           "AND dedup_key=?", (tracked_id, key)).fetchone():
-                continue
             kind = classify(it["title"])
-            con.execute(
+            # The key is a hash of the title's word SET, so two outlets wording
+            # the same development the same way collide on purpose — that is
+            # the dedup. A select-then-insert could not hold that: the second
+            # of two colliding headlines in one batch, or a scheduled check
+            # racing an editor pressing the button, hit the unique constraint
+            # and took the whole check down with a 500. Let the constraint do
+            # the deduplicating, and count what was actually written.
+            cur = con.execute(
                 "INSERT INTO tracked_updates (tracked_id, dedup_key, title, url, "
-                "publisher, published_at, first_seen, kind) VALUES (?,?,?,?,?,?,?,?)",
+                "publisher, published_at, first_seen, kind) VALUES (?,?,?,?,?,?,?,?) "
+                "ON CONFLICT (tracked_id, dedup_key) DO NOTHING",
                 (tracked_id, key, it["title"], it["url"], it["publisher"],
                  it["published_at"], now, kind))
-            added.append({**it, "kind": kind})
+            if getattr(cur, "rowcount", 1):
+                added.append({**it, "kind": kind})
 
         newest = con.execute(
             "SELECT MAX(published_at) m FROM tracked_updates WHERE tracked_id=?",
