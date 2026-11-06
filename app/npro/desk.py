@@ -56,6 +56,55 @@ def _board_lines(limit: int = 12) -> list[str]:
     return lines
 
 
+def _today_lines(limit: int = 10) -> list[str]:
+    """The day's strongest stories, which the one-hour board cannot show.
+
+    The board answers "what is live right now", and for "which stories should
+    I pick at the top of the hour" that is the right question. "Which story is
+    likely to go viral" is not: virality does not respect our ingest window,
+    and answering it from the last hour alone threw away everything that broke
+    earlier the same day — on 6 November the board held 22 stories while 169
+    had been published since midnight.
+
+    Ranked by base_score, not the decayed score. Decay measures how stale a
+    story has gone on the board; it does not measure whether the story
+    mattered today, and ranking a day by it buries the morning's news under
+    whatever happened to land in the last ten minutes.
+    """
+    ist_midnight = (datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)) \
+        .replace(hour=0, minute=0, second=0, microsecond=0) \
+        - timedelta(hours=5, minutes=30)
+    hour_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    with db.connect() as con:
+        rows = con.execute(
+            "SELECT title, base_score, status, published_at, needs_review, "
+            "       category, picked "
+            "FROM stories WHERE published_at >= ? "
+            "ORDER BY base_score DESC, published_at DESC LIMIT ?",
+            (ist_midnight.isoformat(), limit),
+        ).fetchall()
+    rows = db.rows_to_dicts(rows)
+    if not rows:
+        return []
+    lines = ["TODAY'S STRONGEST (since midnight IST, ranked by peak strength "
+             "— these are NOT all on the live board; the board above is the "
+             "last hour only):"]
+    for i, s in enumerate(rows, 1):
+        flags = []
+        # the one thing the model must not get wrong: is this still live
+        if (s.get("published_at") or "") >= hour_ago:
+            flags.append("also on the board now")
+        if s.get("needs_review"):
+            flags.append("single-source, needs verification")
+        if s.get("picked"):
+            flags.append("already picked")
+        lines.append(
+            f"{i}. [{s.get('base_score', 0)}/100 {s.get('status', '')}] "
+            f"{s.get('title', '')} ({_age(s.get('published_at', ''))} old"
+            + (f"; {'; '.join(flags)}" if flags else "") + ")")
+    return lines
+
+
 def _x_lines(limit: int = 5) -> list[str]:
     from app.x.signals import top_signals
     sigs = top_signals()[:limit]
@@ -109,7 +158,7 @@ def desk_snapshot() -> str:
     """The whole desk, as one prompt-ready block. Sections fail independently."""
     now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
     blocks = [f"LIVE DESK SNAPSHOT — {now.strftime('%d %b, %I:%M %p')} IST"]
-    for fn in (_board_lines, _x_lines, _onair_lines, _velocity_lines):
+    for fn in (_board_lines, _today_lines, _x_lines, _onair_lines, _velocity_lines):
         try:
             lines = fn()
             if lines:
